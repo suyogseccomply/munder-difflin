@@ -64,6 +64,9 @@ export interface BreakerInput {
    *  the first question. Optional, so a caller with no workspace notion for an
    *  agent omits it and nothing about that agent changes. */
   lastWorkAt?: number;
+  /** Set when this agent is over a token limit for a period. The caller works it
+   *  out from the ledger; the breaker treats it like any other trip. */
+  limitReason?: string;
 }
 
 const LEVELS: BreakerLevel[] = ['healthy', 'steering', 'constrained', 'stopped'];
@@ -350,6 +353,7 @@ export class CircuitBreaker {
     // dominates it — and an agent stopped four minutes in for re-reads it does not
     // control learns to distrust the breaker. The reason names both figures so an
     // operator can see what tripped and what the agent cost.
+    if (input.limitReason) return { tripping: true, reason: input.limitReason };
     const perAgentCap = cfg.agentTokenCaps?.[input.agentId] ?? defaultCapFor(input.agentId, cfg.defaultAgentTokenCap);
     if (typeof perAgentCap === 'number' && perAgentCap > 0) {
       const work = workTokensOf(input.sample);

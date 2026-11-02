@@ -57,6 +57,12 @@ const EPS = 1e-9;
  *  fold simply resumes on the next call. */
 const MAX_BYTES_PER_PASS = 8 * 1024 * 1024;
 
+/** Quarter-hour buckets, so a local midnight in a :30 or :45 timezone still falls
+ *  on a bucket edge. */
+const BUCKET_MS = 15 * 60 * 1000;
+/** The longest window asked for is a calendar month. */
+const BUCKET_KEEP_MS = 35 * 24 * 60 * 60 * 1000;
+
 export class CostLedgerTotals {
   /** Bytes of the ledger already folded. */
   private offset = 0;
@@ -65,6 +71,10 @@ export class CostLedgerTotals {
   private tail: Buffer = Buffer.alloc(0);
   /** `agentId \t sessionId` → fold state. */
   private readonly seg = new Map<string, Segment>();
+  /** `agentId \t sessionId` → last cumulative work tokens seen. */
+  private readonly lastWork = new Map<string, number>();
+  /** agentId → bucket start → work tokens spent in that bucket. */
+  private readonly buckets = new Map<string, Map<number, number>>();
   /** agentId → lifetime usd. Recomputed after each pass. */
   private totals = new Map<string, number>();
   /** One pass at a time; a timer must never stack folds on itself. */
@@ -78,6 +88,22 @@ export class CostLedgerTotals {
   usdFor(agentId: string): number | null {
     if (!this.warm) return null;
     return this.totals.get(agentId) ?? 0;
+  }
+
+  /** Work tokens spent since `fromMs`, by one agent or (null) by everyone. Null when
+   *  the ledger isn't read yet, so a cold start can't pass for no usage. */
+  tokensSince(agentId: string | null, fromMs: number): number | null {
+    if (!this.warm) return null;
+    const first = Math.floor(fromMs / BUCKET_MS) * BUCKET_MS;
+    const sum = (m: Map<number, number> | undefined): number => {
+      let t = 0;
+      for (const [at, tokens] of m ?? []) if (at >= first) t += tokens;
+      return t;
+    };
+    if (agentId !== null) return sum(this.buckets.get(agentId));
+    let total = 0;
+    for (const m of this.buckets.values()) total += sum(m);
+    return total;
   }
 
   /** Every agent's lifetime usd. Empty until the first pass completes. */
@@ -159,13 +185,38 @@ export class CostLedgerTotals {
     }
   }
 
+  /** Turns a cumulative sample into tokens spent at the row's time. As with usd, a
+   *  decrease means the counter restarted, so the whole new value is new spend. */
+  private foldTokens(key: string, row: { agent_id?: string; ts?: unknown; input?: unknown; output?: unknown; cache_creation?: unknown }): void {
+    const n = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+    const work = n(row.input) + n(row.output) + n(row.cache_creation);
+    const prev = this.lastWork.get(key) ?? 0;
+    this.lastWork.set(key, work);
+    const delta = work >= prev ? work - prev : work;
+    const at = typeof row.ts === 'number' ? row.ts : Date.parse(String(row.ts));
+    if (delta <= 0 || !Number.isFinite(at)) return;
+    let m = this.buckets.get(row.agent_id as string);
+    if (!m) { m = new Map(); this.buckets.set(row.agent_id as string, m); }
+    const bucket = Math.floor(at / BUCKET_MS) * BUCKET_MS;
+    m.set(bucket, (m.get(bucket) ?? 0) + delta);
+  }
+
+  private pruneBuckets(): void {
+    let newest = 0;
+    for (const m of this.buckets.values()) for (const at of m.keys()) if (at > newest) newest = at;
+    for (const m of this.buckets.values()) {
+      for (const at of m.keys()) if (newest - at > BUCKET_KEEP_MS) m.delete(at);
+    }
+  }
+
   private foldLine(line: string): void {
-    let row: { agent_id?: string; session_id?: string; usd?: number };
+    let row: { agent_id?: string; session_id?: string; usd?: number; ts?: unknown; input?: unknown; output?: unknown; cache_creation?: unknown };
     try { row = JSON.parse(line); } catch { return; } // half-written tail line
     if (!row || typeof row.agent_id !== 'string') return;
     const usd = typeof row.usd === 'number' && Number.isFinite(row.usd) ? row.usd : 0;
 
     const key = `${row.agent_id}\t${row.session_id ?? ''}`;
+    this.foldTokens(key, row);
     let s = this.seg.get(key);
     if (!s) { s = { committed: 0, peak: 0 }; this.seg.set(key, s); }
 
@@ -179,6 +230,7 @@ export class CostLedgerTotals {
   }
 
   private recompute(): void {
+    this.pruneBuckets();
     const next = new Map<string, number>();
     for (const [key, s] of this.seg) {
       const agentId = key.slice(0, key.indexOf('\t'));
@@ -191,6 +243,8 @@ export class CostLedgerTotals {
     this.offset = 0;
     this.tail = Buffer.alloc(0);
     this.seg.clear();
+    this.lastWork.clear();
+    this.buckets.clear();
     this.totals = new Map();
     this.warm = false;
   }

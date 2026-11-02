@@ -117,6 +117,18 @@ function RuleCard({ title, blurb, rule, messageLabel, messageHint, messagePlaceh
             : t('contextSection.off')}
         </Hint>
       )}
+      {open && rule.onWorkSwitch !== undefined && (
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--cth-ink-700)', margin: '6px 0', cursor: 'pointer' }}>
+          <input type="checkbox" checked={rule.onWorkSwitch} onChange={(e) => onPatch({ onWorkSwitch: e.target.checked })} />
+          {t('contextSection.onWorkSwitch')}
+        </label>
+      )}
+      {open && rule.onFill !== undefined && (
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--cth-ink-700)', margin: '6px 0', cursor: 'pointer' }}>
+          <input type="checkbox" checked={rule.onFill} onChange={(e) => onPatch({ onFill: e.target.checked })} />
+          {t('contextSection.onFill')}
+        </label>
+      )}
       {open && (
         <div style={{ marginTop: 4 }}>
           <Field label={t('contextSection.noSoonerThan')}>

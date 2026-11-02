@@ -93,6 +93,8 @@ export interface HarnessConfig {
   staplerModel?: 'standard' | 'larger';
   /** The Teams relay this office uses. Unset means Teams is off. */
   teamsRelayUrl?: string;
+  /** Token limits per period, for the office and each agent. */
+  tokenLimits?: { office?: Partial<Record<'fiveHour' | 'daily' | 'weekly' | 'monthly', number>>; agents?: { [agentId: string]: Partial<Record<'fiveHour' | 'daily' | 'weekly' | 'monthly', number>> } };
   capabilityServers?: { [id: string]: { label: string; command: string; args: string[]; secretNames: string[] } };
   semanticMemory: boolean;
   embeddingModel: 'minilm' | 'embeddinggemma';

@@ -304,6 +304,8 @@ export interface HarnessConfig {
   staplerModel?: 'standard' | 'larger';
   /** The Teams relay this office uses. Unset means Teams is off. */
   teamsRelayUrl?: string;
+  /** Token limits per period, for the office and each agent. */
+  tokenLimits?: { office?: Partial<Record<'fiveHour' | 'daily' | 'weekly' | 'monthly', number>>; agents?: { [agentId: string]: Partial<Record<'fiveHour' | 'daily' | 'weekly' | 'monthly', number>> } };
   capabilityServers?: { [id: string]: { label: string; command: string; args: string[]; secretNames: string[] } };
   semanticMemory: boolean;
   embeddingModel: 'minilm' | 'embeddinggemma';
@@ -878,6 +880,7 @@ const api = {
     ipcRenderer.on('teams:changed', listener);
     return () => ipcRenderer.removeListener('teams:changed', listener);
   },
+  tokenLimitsUsage: (): Promise<{ ready: boolean; office: Partial<Record<'fiveHour' | 'daily' | 'weekly' | 'monthly', number>>; agents: Record<string, Partial<Record<'fiveHour' | 'daily' | 'weekly' | 'monthly', number>>> }> => ipcRenderer.invoke('limits:usage'),
   skillsLocal: (cwd?: string): Promise<LocalSkill[]> => ipcRenderer.invoke('skills:local', cwd),
   /** The browsable skills catalog (cached; `force` re-fetches). */
   skillsCatalog: (force?: boolean): Promise<{
@@ -1289,7 +1292,7 @@ const api = {
   /** Fires when a context rule comes due. `rule` rides along because main owns
    *  only the CADENCE — the renderer applies the per-agent pressure gate and
    *  queues the command for each agent that qualifies. */
-  onContextTrigger: (cb: (evt: { action: 'compact' | 'clear'; rule: ContextRule }) => void): (() => void) => {
+  onContextTrigger: (cb: (evt: { action: 'compact' | 'clear'; rule: ContextRule; agentId?: string; followUp?: string }) => void): (() => void) => {
     const listener = (_e: IpcRendererEvent, payload: { action: 'compact' | 'clear'; rule: ContextRule }) => cb(payload);
     ipcRenderer.on('trigger:context', listener);
     return () => ipcRenderer.removeListener('trigger:context', listener);

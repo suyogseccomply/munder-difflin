@@ -83,6 +83,8 @@ export interface ContextRule {
   enabled: boolean;
   /** Also run as soon as an agent's reading crosses the bar, not only on the timer. */
   onFill?: boolean;
+  /** Clear only: also run when an agent moves on to different work, after a handoff. */
+  onWorkSwitch?: boolean;
   /** Minimum wall-clock gap between runs. */
   everyMs: number;
   /** Percent (0-100) of the context window that must be used before firing. */
@@ -143,6 +145,7 @@ export const DEFAULT_CONTEXT_TRIGGER: ContextTriggerConfig = {
   },
   clear: {
     enabled: false,
+    onWorkSwitch: true,
     everyMs: 7_200_000,
     minContextPct: 90,
     minContextPctLargeWindow: 80,

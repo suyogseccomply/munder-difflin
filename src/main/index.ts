@@ -69,6 +69,16 @@ import { inboxNudgeText } from '../shared/hiveNudge';
 import { resolveGodName } from '../shared/godIdentity';
 import { fetchHireManifest, prepareHireExport, readHireManifestFiles } from './hire';
 import { loadCapabilityList } from './capabilityList';
+import { LIMIT_PERIODS, limitBreaches, periodStart, type LimitPeriod } from '../shared/tokenLimits';
+import {
+  HANDOFF_TIMEOUT_MS,
+  WORK_SWITCH_MIN_SESSION_MS,
+  detectWorkSwitches,
+  handoffFollowUp,
+  handoffRequestBody,
+  type WorkSwitchState
+} from '../shared/workSwitch';
+import { clearCommandForProvider } from '../shared/providerAutomation';
 import { initStapler, shutdownStapler } from './stapler';
 import { initTeams } from './teams';
 import {
@@ -984,8 +994,11 @@ function ensureDefaultMissions(): void {
   if (!cfg.opsStandupSeeded) {
     const missions = cfg.missions ?? [];
     const has = missions.some((m) => m.id === OPS_STANDUP_MISSION.id);
+    // Only an install that predates the standup is owed one. A new install, which
+    // hasn't been through onboarding yet, starts without it.
+    const owed = !has && cfg.onboardingComplete;
     writeConfig({
-      missions: has ? missions : [...missions, { ...OPS_STANDUP_MISSION, lastFiredAt: Date.now() }],
+      missions: owed ? [...missions, { ...OPS_STANDUP_MISSION, lastFiredAt: Date.now() }] : missions,
       opsStandupSeeded: true
     });
   }
@@ -1311,6 +1324,10 @@ function runBreakerBeat(progressWindowMs: number): void {
       lastWorkAt: lastWorkAt(id)
     });
   }
+  // Period limits, from the ledger. The orchestrator's tokens count toward the office
+  // total but it isn't in `inputs`, so it can't itself be blamed.
+  const breaches = limitBreaches(readConfig().tokenLimits, inputs.map((i) => i.agentId), (id, from) => costTotals.tokensSince(id, from), now);
+  for (const input of inputs) input.limitReason = breaches.get(input.agentId);
   for (const d of breaker.tick(inputs, now)) {
     try { liveWebContents()?.send('control:breakerState', d.state); } catch { /* window gone */ }
     if (d.action === 'none') continue;
@@ -1330,6 +1347,88 @@ function runBreakerBeat(progressWindowMs: number): void {
     }
   }
 }
+
+ipcMain.handle('limits:usage', () => {
+  const now = Date.now();
+  const totals = (id: string | null): Partial<Record<LimitPeriod, number>> => {
+    const out: Partial<Record<LimitPeriod, number>> = {};
+    for (const p of LIMIT_PERIODS) {
+      const used = costTotals.tokensSince(id, periodStart(p, now));
+      if (used !== null) out[p] = used;
+    }
+    return out;
+  };
+  const root = hive.root();
+  if (root) void costTotals.refresh(join(root, 'cost-ledger.jsonl'));
+  const agents: Record<string, Partial<Record<LimitPeriod, number>>> = {};
+  for (const id of Object.keys(hive.registry().agents)) agents[id] = totals(id);
+  return { ready: costTotals.ready, office: totals(null), agents };
+});
+
+// ─── Clear on a work switch ──────────────────────────────────────────────────
+const WORK_SWITCH_POLL_MS = 20_000;
+let workSwitchState: WorkSwitchState | null = null;
+/** When each agent's current context began: its spawn, or its last clear. */
+const contextStartedAt = new Map<string, number>();
+/** Agents asked for a handoff and waiting to be cleared. */
+const pendingHandoffs = new Map<string, number>();
+
+const handoffPath = (agentId: string): string | null => {
+  const root = hive.root();
+  return root ? join(root, 'agents', agentId, 'handoff.md') : null;
+};
+
+function clearAfterHandoff(agentId: string): void {
+  const path = handoffPath(agentId);
+  if (!path) return;
+  const rule = contextRule('clear');
+  contextStartedAt.set(agentId, Date.now());
+  try {
+    // The switch itself is the trigger, so the timer rule's own gates don't apply.
+    liveWebContents()?.send('trigger:context', {
+      action: 'clear',
+      rule: { ...rule, enabled: true, minContextPct: 0, minContextPctLargeWindow: 0 },
+      agentId,
+      followUp: handoffFollowUp(path)
+    });
+  } catch { /* window gone */ }
+}
+
+function workSwitchTick(): void {
+  if (!hive.enabled()) return;
+  let tasks: { id: string; assignee?: string; status: string }[];
+  try {
+    const ledger = hive.tasks() as { tasks?: { id: string; assignee?: string; status: string }[] };
+    tasks = Array.isArray(ledger?.tasks) ? ledger.tasks.filter((t) => t && typeof t.id === 'string') : [];
+  } catch { return; }
+  const { state, switched } = detectWorkSwitches(workSwitchState, tasks);
+  workSwitchState = state;
+  const rule = contextRule('clear');
+  const now = Date.now();
+  if (rule.onWorkSwitch) {
+    const reg = hive.registry();
+    for (const id of switched) {
+      const a = reg.agents[id];
+      const path = handoffPath(id);
+      if (!a || !path || a.archived || a.isAssistant || id === reg.godId || !ptyForAgent(id)) continue;
+      if (pendingHandoffs.has(id) || !clearCommandForProvider(a.provider ?? 'claude', rule.message)) continue;
+      // A fresh context has too little in it to be worth interrupting for.
+      if (now - (contextStartedAt.get(id) ?? now) < WORK_SWITCH_MIN_SESSION_MS) continue;
+      pendingHandoffs.set(id, now);
+      hive.send({ to: id, act: 'request', subject: 'Write your handoff', body: handoffRequestBody(path) }, 'system');
+    }
+  }
+  for (const [id, askedAt] of pendingHandoffs) {
+    const path = handoffPath(id);
+    let written = false;
+    try { written = !!path && statSync(path).mtimeMs >= askedAt; } catch { /* not written yet */ }
+    if (!written && now - askedAt < HANDOFF_TIMEOUT_MS) continue;
+    pendingHandoffs.delete(id);
+    // Skipped if the agent went away while it was writing.
+    if (ptyForAgent(id)) clearAfterHandoff(id);
+  }
+}
+setInterval(workSwitchTick, WORK_SWITCH_POLL_MS).unref();
 
 /** Lifetime spend, folded from cost-ledger.jsonl. `telemetry`'s usd counter is
  *  cumulative-since-process-start and restarts at ~0 on every app restart, so
@@ -3019,6 +3118,8 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
   // live terminal means active — ensureAgent above already cleared `archived`.
   if (opts.hive?.id) {
     ptyToAgent.set(opts.id, opts.hive.id);
+    contextStartedAt.set(opts.hive.id, Date.now());
+    pendingHandoffs.delete(opts.hive.id);
     // Worker inbox-wake watchdog (#151): boot grace starts at spawn so the
     // initial orientation prompt is never mistaken for an idle agent.
     workerWake.noteSpawn(opts.id);
@@ -4356,7 +4457,8 @@ function sanitizeContextRule(patch: Partial<ContextRule> | undefined, current: C
     minContextPct: num(p.minContextPct, current.minContextPct, 0, 100),
     minContextPctLargeWindow: num(p.minContextPctLargeWindow, current.minContextPctLargeWindow, 0, 100),
     message: typeof p.message === 'string' ? p.message : current.message,
-    onFill: typeof p.onFill === 'boolean' ? p.onFill : current.onFill
+    onFill: typeof p.onFill === 'boolean' ? p.onFill : current.onFill,
+    onWorkSwitch: typeof p.onWorkSwitch === 'boolean' ? p.onWorkSwitch : current.onWorkSwitch
   };
 }
 

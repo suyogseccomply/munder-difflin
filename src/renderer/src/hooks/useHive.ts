@@ -1093,7 +1093,8 @@ export function useHive(config: HarnessConfig | null): void {
   useEffect(() => {
     if (!config?.onboardingComplete) return;
 
-       const fire = (action: 'compact' | 'clear', rule: ContextRule, only?: ReadonlySet<string>): void => {
+       const fire = (action: 'compact' | 'clear', rule: ContextRule, only?: ReadonlySet<string>): string[] => {
+      const queuedFor: string[] = [];
       const { agents, messageQueues, enqueueMessage } = useStore.getState();
       const now = Date.now();
       for (const a of agents) {
@@ -1143,18 +1144,23 @@ export function useHive(config: HarnessConfig | null): void {
         // compactUsed rides on the queued message so the delivery site knows
         // which count to latch.
         enqueueMessage(a.id, command, action === 'compact' ? { compactUsed: used } : undefined);
+        queuedFor.push(a.id);
       }
+      return queuedFor;
     };
 
     // The typed `onContextTrigger` arrives with the main-process/preload change
     // that emits it; access it defensively so this lands independently of that.
     const off = (window.cth as unknown as {
       onContextTrigger?: (
-        cb: (p: { action: 'compact' | 'clear'; rule: ContextRule }) => void
+        cb: (p: { action: 'compact' | 'clear'; rule: ContextRule; agentId?: string; followUp?: string }) => void
       ) => () => void;
     }).onContextTrigger?.((p) => {
       if (!p?.rule) return;
-      fire(p.action === 'clear' ? 'clear' : 'compact', p.rule);
+      const queuedFor = fire(p.action === 'clear' ? 'clear' : 'compact', p.rule, p.agentId ? new Set([p.agentId]) : undefined);
+      // Queued behind the clear, so it lands in the new context. Sent this way because
+      // an inbox nudge won't repeat for mail that was nudged before the clear.
+      if (p.followUp) for (const id of queuedFor) useStore.getState().enqueueMessage(id, p.followUp);
     });
 
     // LEGACY fallback: main still emits the old parameterless auto-compact until

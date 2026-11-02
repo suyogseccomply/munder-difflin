@@ -929,6 +929,8 @@
     "noKey": "no key"
   },
   "contextSection": {
+    "onWorkSwitch": "Also clear when an agent moves to different work, after writing a handoff (sessions over 60 minutes)",
+    "onFill": "Also compact as soon as an agent crosses this bar",
     "loading": "One sec…",
     "intro": "A rule fires only when both halves agree: the gap since its last run has passed, AND that agent's context is at least as full as the bar. A bar of 0% means the clock alone.",
     "compact": "Compact",
@@ -1632,5 +1634,16 @@
     "sendFile": "file",
     "sendFolder": "folder",
     "passwordHint": "Sent. Give your teammate this password another way. It is not shown again."
+  },
+  "tokenLimits": {
+    "title": "Token limits per period",
+    "hint": "Counts work tokens, the same as the agent cap. Going over steers, then constrains the agent, and stops it only if hard stop is on. Saved when you leave a field; blank means no limit. Temps and the orchestrator can't be tripped, but the orchestrator counts toward the office.",
+    "reading": "Still reading the usage history.",
+    "fiveHour": "Every 5 hours",
+    "daily": "Daily",
+    "weekly": "Weekly",
+    "monthly": "Monthly",
+    "office": "Office",
+    "used": "{{value}} used"
   }
 }

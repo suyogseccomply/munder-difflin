@@ -229,6 +229,8 @@ export interface HarnessConfig {
   staplerModel?: 'standard' | 'larger';
   /** The Teams relay this office uses. Unset means Teams is off. */
   teamsRelayUrl?: string;
+  /** Token limits per period, for the office and each agent. */
+  tokenLimits?: { office?: Partial<Record<'fiveHour' | 'daily' | 'weekly' | 'monthly', number>>; agents?: { [agentId: string]: Partial<Record<'fiveHour' | 'daily' | 'weekly' | 'monthly', number>> } };
   capabilityServers?: { [id: string]: { label: string; command: string; args: string[]; secretNames: string[] } };
   /** Enable semantic memory (MemPalace CLI). No-op if mempalace isn't installed. */
   semanticMemory: boolean;
@@ -457,7 +459,8 @@ const DEFAULTS: HarnessConfig = {
   defaultWorkerTokenCap: 0, // 0 = unlimited (human directive: NO per-worker cap)
   semanticMemory: true,
   embeddingModel: 'minilm',
-  missions: [OPS_STANDUP_MISSION],
+  // A new install has no hourly standup. Existing installs keep theirs.
+  missions: [],
   notifications: false,
   strongKeepalive: false,
   autoUpdate: true,
@@ -521,12 +524,15 @@ function configPath(): string {
  * Every branch below therefore constructs a fresh object, including the
  * "nothing persisted" branch.
  */
-function withTriggerDefaults(cfg: HarnessConfig): HarnessConfig {
+export function withTriggerDefaults(cfg: HarnessConfig): HarnessConfig {
   return {
     ...cfg,
     contextTrigger: {
-      compact: { ...DEFAULT_CONTEXT_TRIGGER.compact, ...cfg.contextTrigger?.compact },
-      clear: { ...DEFAULT_CONTEXT_TRIGGER.clear, ...cfg.contextTrigger?.clear }
+      // The token-saving switches default on only for a new install, whose rule comes
+      // from the defaults and already holds them. A saved rule without them predates
+      // them, so they stay off rather than changing how an existing floor behaves.
+      compact: { ...DEFAULT_CONTEXT_TRIGGER.compact, onFill: false, ...cfg.contextTrigger?.compact },
+      clear: { ...DEFAULT_CONTEXT_TRIGGER.clear, onWorkSwitch: false, ...cfg.contextTrigger?.clear }
     },
     orgTrigger: { ...DEFAULT_ORG_TRIGGER, ...cfg.orgTrigger },
     webhookTriggers: Array.isArray(cfg.webhookTriggers)
