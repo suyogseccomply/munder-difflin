@@ -948,6 +948,9 @@ const api = {
     error?: string;
   }> =>
     ipcRenderer.invoke('hire:openFile'),
+  /** Save a built manifest through a native save dialog. Main re-validates it. */
+  saveHireFile: (manifest: HireManifest): Promise<{ ok: true; path: string } | { ok: false; error: string }> =>
+    ipcRenderer.invoke('hire:saveFile', manifest),
 
   // ─── Config changes ──────────────────────────────────────────────────────
   /** Fired whenever a setting is saved, with the full updated config. */

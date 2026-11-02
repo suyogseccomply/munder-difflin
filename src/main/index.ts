@@ -67,7 +67,7 @@ import { ControlRegistry } from './control';
 import { WorkerWakeWatchdog, WORKER_WAKE_REPORT_MS, activityEvidenceAt, type WorkerWakeFacts } from './workerWake';
 import { inboxNudgeText } from '../shared/hiveNudge';
 import { resolveGodName } from '../shared/godIdentity';
-import { fetchHireManifest, readHireManifestFiles } from './hire';
+import { fetchHireManifest, prepareHireExport, readHireManifestFiles } from './hire';
 import { parseHireDeepLink, type HireManifest } from '../shared/hire';
 import { ClosingTimeController } from './closingTime';
 import {
@@ -2293,6 +2293,24 @@ ipcMain.handle('hire:openFile', async () => {
     ...batch,
     error: batch.manifests.length === 0 ? 'no valid hire manifests selected' : undefined
   };
+});
+
+/** Save an exported agent file. Re-validates in main; the user picks the path. */
+ipcMain.handle('hire:saveFile', async (_evt, raw: unknown) => {
+  const prepared = prepareHireExport(raw);
+  if (!prepared.ok) return prepared;
+  const res = await dialog.showSaveDialog({
+    title: 'Export agent file',
+    defaultPath: join(app.getPath('documents'), prepared.fileName),
+    filters: [{ name: 'Hire manifest', extensions: ['json'] }]
+  });
+  if (res.canceled || !res.filePath) return { ok: false as const, error: 'cancelled' };
+  try {
+    writeFileSync(res.filePath, prepared.json);
+    return { ok: true as const, path: res.filePath };
+  } catch (e) {
+    return { ok: false as const, error: e instanceof Error ? e.message : String(e) };
+  }
 });
 
 /**

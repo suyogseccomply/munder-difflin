@@ -1,6 +1,8 @@
 import { useEffect, useState, type CSSProperties } from 'react';
+import { useTranslation } from 'react-i18next';
 import { PixelPanel } from './PixelPanel';
 import { PixelButton } from './PixelButton';
+import { ExportAgentModal } from './ExportAgentModal';
 import { SpritePortrait } from './SpritePortrait';
 import { ProviderLogo } from './ProviderLogo';
 import { useStore, type Agent } from '@/store/store';
@@ -32,6 +34,8 @@ export interface EditAgentModalProps {
 export function EditAgentModal({ agent, onClose }: EditAgentModalProps) {
   const updateAgent = useStore((s) => s.updateAgent);
   const [config, setConfig] = useState<HarnessConfig | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const { t } = useTranslation();
 
   const [name, setName] = useState(agent.name);
   const [character, setCharacter] = useState<OfficeCharacterName>(agent.character);
@@ -282,12 +286,14 @@ export function EditAgentModal({ agent, onClose }: EditAgentModalProps) {
 
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
               <PixelButton variant="ghost" size="md" onClick={onClose}>cancel</PixelButton>
+              <PixelButton variant="secondary" size="md" onClick={() => setExportOpen(true)}>{t('agentFiles.exportButton')}</PixelButton>
               <div style={{ flex: 1 }} />
               <PixelButton variant="primary" size="md" onClick={save}>save changes</PixelButton>
             </div>
           </div>
         </PixelPanel>
       </div>
+      {exportOpen && <ExportAgentModal agent={agent} onClose={() => setExportOpen(false)} />}
     </div>
   );
 }

@@ -1405,5 +1405,33 @@
     "viewSource": "查看源码",
     "loading": "正在加载图片…",
     "decodeFailed": "无法解码此图片——文件可能已损坏或扩展名有误"
+  },
+  "agentFiles": {
+    "exportButton": "导出智能体文件",
+    "exportTitle": "导出智能体文件",
+    "exportIntro": "选择要包含的内容。导入此文件的人会在启动前进行审核。",
+    "neverIncluded": "绝不包含：密钥、令牌、环境变量、文件夹或启动命令。",
+    "preview": "文件预览",
+    "save": "保存文件",
+    "close": "关闭",
+    "saved": "已保存到 {{path}}",
+    "left": "未包含",
+    "field_description": "描述",
+    "field_goal": "目标",
+    "field_character": "角色形象",
+    "field_accent": "颜色",
+    "field_provider": "引擎",
+    "field_model": "模型",
+    "field_isolate": "独立工作树设置",
+    "field_tokenCap": "令牌上限",
+    "reason_secret": "内容似乎包含密钥或令牌",
+    "reason_path": "内容包含本地文件夹路径",
+    "reason_unsupported_provider": "智能体文件仅支持 Claude、Codex、Antigravity 和 Cursor",
+    "reason_needs_provider": "模型需要同时包含其引擎",
+    "reason_too_long": "内容对智能体文件来说太长",
+    "reason_invalid": "该值对智能体文件无效",
+    "templatesButton": "模板",
+    "templatesIntro": "选择一个角色来填写此表单。在你点击启动之前不会运行任何内容。",
+    "templatesSearch": "搜索模板"
   }
 }

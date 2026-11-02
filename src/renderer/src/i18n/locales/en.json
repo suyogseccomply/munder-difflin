@@ -1405,5 +1405,33 @@
     "viewSource": "view source",
     "loading": "loading image…",
     "decodeFailed": "could not decode this image — the file may be corrupt or misnamed"
+  },
+  "agentFiles": {
+    "exportButton": "export agent file",
+    "exportTitle": "EXPORT AGENT FILE",
+    "exportIntro": "Choose what goes in. Whoever imports this file reviews it before anything starts.",
+    "neverIncluded": "Never included: keys, tokens, env vars, folders, or the spawn command.",
+    "preview": "File preview",
+    "save": "save file",
+    "close": "close",
+    "saved": "Saved to {{path}}",
+    "left": "Left out",
+    "field_description": "Description",
+    "field_goal": "Goal",
+    "field_character": "Character",
+    "field_accent": "Color",
+    "field_provider": "Engine",
+    "field_model": "Model",
+    "field_isolate": "Isolated worktree setting",
+    "field_tokenCap": "Token cap",
+    "reason_secret": "it looks like it contains a key or token",
+    "reason_path": "it contains a local folder path",
+    "reason_unsupported_provider": "agent files only support Claude, Codex, Antigravity and Cursor",
+    "reason_needs_provider": "a model needs its engine included",
+    "reason_too_long": "it is too long for an agent file",
+    "reason_invalid": "the value is not valid for an agent file",
+    "templatesButton": "templates",
+    "templatesIntro": "Pick a role to fill in this form. Nothing starts until you press spawn.",
+    "templatesSearch": "Search templates"
   }
 }

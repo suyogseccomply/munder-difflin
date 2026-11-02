@@ -1405,5 +1405,33 @@
     "viewSource": "عرض المصدر",
     "loading": "جارٍ تحميل الصورة…",
     "decodeFailed": "تعذّر فك ترميز هذه الصورة — قد يكون الملف تالفًا أو امتداده خاطئًا"
+  },
+  "agentFiles": {
+    "exportButton": "تصدير ملف الوكيل",
+    "exportTitle": "تصدير ملف الوكيل",
+    "exportIntro": "اختر ما يتضمنه الملف. يراجعه من يستورده قبل بدء أي شيء.",
+    "neverIncluded": "لا يتضمن أبدًا: المفاتيح أو الرموز أو متغيرات البيئة أو المجلدات أو أمر التشغيل.",
+    "preview": "معاينة الملف",
+    "save": "حفظ الملف",
+    "close": "إغلاق",
+    "saved": "تم الحفظ في {{path}}",
+    "left": "تم استبعاده",
+    "field_description": "الوصف",
+    "field_goal": "الهدف",
+    "field_character": "الشخصية",
+    "field_accent": "اللون",
+    "field_provider": "المحرك",
+    "field_model": "النموذج",
+    "field_isolate": "إعداد شجرة العمل المعزولة",
+    "field_tokenCap": "حد الرموز",
+    "reason_secret": "يبدو أنه يحتوي على مفتاح أو رمز",
+    "reason_path": "يحتوي على مسار مجلد محلي",
+    "reason_unsupported_provider": "ملفات الوكلاء تدعم Claude وCodex وAntigravity وCursor فقط",
+    "reason_needs_provider": "يجب تضمين محرك النموذج",
+    "reason_too_long": "طويل جدًا لملف وكيل",
+    "reason_invalid": "القيمة غير صالحة لملف وكيل",
+    "templatesButton": "القوالب",
+    "templatesIntro": "اختر دورًا لملء هذا النموذج. لن يبدأ شيء حتى تضغط على زر التشغيل.",
+    "templatesSearch": "البحث في القوالب"
   }
 }

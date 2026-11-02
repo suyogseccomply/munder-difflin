@@ -344,3 +344,120 @@ export function isAllowedManifestUrl(u: URL): boolean {
 
 /** Byte cap shared by the deep-link fetcher and the file importer. */
 export const HIRE_MAX_BYTES = MAX_BYTES;
+
+// ─── Export ─────────────────────────────────────────────────────────────────
+
+/** Fields the user may choose to include in an exported agent file. `name` is
+ *  required by the spec, so it is always included. */
+export const HIRE_EXPORT_FIELDS = [
+  'description', 'goal', 'character', 'accent', 'provider', 'model', 'isolate', 'tokenCap'
+] as const;
+export type HireExportField = (typeof HIRE_EXPORT_FIELDS)[number];
+
+/** What an export reads. There is deliberately no command, env, cwd or worktree
+ *  path here: what the builder is never given, it can never leak. */
+export interface HireExportSource {
+  name: string;
+  description?: string;
+  goal?: string;
+  character?: string;
+  accent?: string;
+  provider?: string;
+  model?: string;
+  isolate?: boolean;
+  tokenCap?: number;
+}
+
+export type HireOmitReason = 'secret' | 'path' | 'unsupported-provider' | 'needs-provider' | 'too-long' | 'invalid';
+
+export interface HireExportResult {
+  /** Null only when the name itself cannot be exported; see `errors`. */
+  manifest: HireManifest | null;
+  /** Fields the user wanted but the export refused, and why. */
+  omitted: { field: HireExportField; reason: HireOmitReason }[];
+  errors: string[];
+}
+
+const SECRET_PATTERNS: readonly RegExp[] = [
+  /\bsk-[A-Za-z0-9_-]{16,}/,
+  /\bgh[pousr]_[A-Za-z0-9]{20,}/,
+  /\bgithub_pat_[A-Za-z0-9_]{20,}/,
+  /\bxox[abprs]-[A-Za-z0-9-]{10,}/,
+  /\bAKIA[0-9A-Z]{16}\b/,
+  /\bAIza[0-9A-Za-z_-]{30,}/,
+  /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\./,
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
+  /\bBearer\s+[A-Za-z0-9._~+/-]{16,}/i,
+  /\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|token|secret|password|passwd)["']?\s*[:=]\s*["']?[^\s"']{8,}/i
+];
+
+const LOCAL_PATH_PATTERNS: readonly RegExp[] = [
+  /\b[A-Za-z]:[\\/](?:Users|Documents and Settings)[\\/]/i,
+  /(?:^|[\s"'`(=])\/(?:Users|home|root)\//,
+  /(?:^|[\s"'`(=])~[\\/]/
+];
+
+/** True when text appears to hold a credential. Errs towards refusing: a false
+ *  positive costs one omitted field the user can reword, a miss publishes a key. */
+export function looksLikeSecret(text: string): boolean {
+  return SECRET_PATTERNS.some((re) => re.test(text));
+}
+
+/** True when text names a location in someone's home directory. */
+export function looksLikeLocalPath(text: string): boolean {
+  return LOCAL_PATH_PATTERNS.some((re) => re.test(text));
+}
+
+/** Build an exportable manifest. Pure; no I/O. The result always satisfies
+ *  validateHireManifest, and anything refused is reported rather than dropped
+ *  silently, so the user can see what the recipient will not get. */
+export function buildHireManifest(
+  source: HireExportSource,
+  include: Partial<Record<HireExportField, boolean>> = {}
+): HireExportResult {
+  const wants = (f: HireExportField): boolean => include[f] !== false;
+  const omitted: HireExportResult['omitted'] = [];
+  const out: Record<string, unknown> = { spec: HIRE_SPEC_V1, name: source.name.trim().slice(0, 40) };
+
+  const text = (field: 'description' | 'goal', max: number): void => {
+    const value = source[field]?.trim();
+    if (!value || !wants(field)) return;
+    if (looksLikeSecret(value)) omitted.push({ field, reason: 'secret' });
+    else if (looksLikeLocalPath(value)) omitted.push({ field, reason: 'path' });
+    else if (value.length > max) omitted.push({ field, reason: 'too-long' });
+    else out[field] = value;
+  };
+  text('description', 200);
+  text('goal', 4000);
+
+  for (const field of ['character', 'accent'] as const) {
+    const value = source[field]?.trim().toLowerCase();
+    if (value && wants(field)) out[field] = value.slice(0, 24);
+  }
+
+  const provider = source.provider === 'agy' ? 'antigravity' : source.provider;
+  if (provider && wants('provider')) {
+    if (PROVIDERS.includes(provider)) out.provider = provider;
+    else omitted.push({ field: 'provider', reason: 'unsupported-provider' });
+  }
+  const model = source.model?.trim();
+  if (model && wants('model')) {
+    // A model id only means something to its own engine.
+    if (!out.provider) omitted.push({ field: 'model', reason: 'needs-provider' });
+    else if (!MODEL_RE.test(model)) omitted.push({ field: 'model', reason: 'invalid' });
+    else out.model = model;
+  }
+
+  if (source.isolate !== undefined && wants('isolate')) out.isolate = source.isolate;
+
+  const cap = source.tokenCap;
+  if (cap !== undefined && wants('tokenCap')) {
+    if (Number.isInteger(cap) && cap > 0 && cap <= MAX_AGENT_TOKEN_CAP) out.tokenCap = cap;
+    else omitted.push({ field: 'tokenCap', reason: 'invalid' });
+  }
+
+  const checked = validateHireManifest(out);
+  return checked.ok && checked.manifest
+    ? { manifest: checked.manifest, omitted, errors: [] }
+    : { manifest: null, omitted, errors: checked.errors };
+}

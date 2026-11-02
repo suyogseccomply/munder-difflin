@@ -271,3 +271,12 @@ export function readHireManifestFiles(paths: readonly string[]): {
   }
   return { manifests, errors };
 }
+
+/** Re-validate a renderer-supplied manifest and produce the file to save. The
+ *  renderer built it, but main owns the disk, so nothing is trusted on the way. */
+export function prepareHireExport(raw: unknown): { ok: true; json: string; fileName: string } | { ok: false; error: string } {
+  const result = finish(validateHireManifest(raw));
+  if (!result.ok) return result;
+  const stem = result.manifest.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'agent';
+  return { ok: true, json: `${JSON.stringify(result.manifest, null, 2)}\n`, fileName: `${stem}.hire.json` };
+}

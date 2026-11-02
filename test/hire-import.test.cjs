@@ -108,3 +108,124 @@ test('Command Center sets and clears one cap through the atomic IPC', () => {
   assert.match(capFlow, /window\.cth\.setAgentTokenCap\(id, tokens\)/);
   assert.doesNotMatch(capFlow, /updateConfig\(\{\s*agentTokenCaps/);
 });
+
+// ─── Export ─────────────────────────────────────────────────────────────────
+const { buildHireManifest, validateHireManifest, HIRE_EXPORT_FIELDS } = loadTs('src/shared/hire.ts');
+const { prepareHireExport } = loadTs('src/main/hire.ts');
+const { HIRE_TEMPLATES, HIRE_TEMPLATE_CATEGORIES, templateManifest } = loadTs('src/shared/hireTemplates.ts');
+
+const fullAgent = () => ({
+  name: 'Dwight', description: 'Tests the login flow', goal: 'Keep login green',
+  character: 'dwight', accent: 'mint', provider: 'claude', model: 'claude-sonnet-4-6[1m]',
+  isolate: true, tokenCap: 5000
+});
+
+test('an exported agent survives a round trip through a file and the importer', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'munder-hire-export-'));
+  try {
+    const { manifest, omitted } = buildHireManifest(fullAgent());
+    assert.deepEqual(omitted, []);
+    const prepared = prepareHireExport(manifest);
+    assert.equal(prepared.ok, true);
+    assert.equal(prepared.fileName, 'dwight.hire.json');
+    const path = join(dir, prepared.fileName);
+    writeFileSync(path, prepared.json);
+    const back = readHireManifestFiles([path]);
+    assert.deepEqual(back.errors, []);
+    assert.equal(back.manifests[0].goal, 'Keep login green');
+    assert.equal(back.manifests[0].model, 'claude-sonnet-4-6[1m]');
+    assert.equal(back.manifests[0].tokenCap, 5000);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('deselected fields stay out and are not reported as refused', () => {
+  const include = Object.fromEntries(HIRE_EXPORT_FIELDS.map((f) => [f, false]));
+  const { manifest, omitted } = buildHireManifest(fullAgent(), include);
+  assert.deepEqual(Object.keys(JSON.parse(JSON.stringify(manifest))).sort(), ['name', 'spec']);
+  assert.deepEqual(omitted, []);
+});
+
+for (const [label, value] of [
+  ['an Anthropic-style key', 'use sk-ant-abcdefghijklmnop1234'],
+  ['a GitHub token', 'ghp_abcdefghijklmnopqrstuvwxyz12'],
+  ['a Slack token', 'xoxb-1234567890-abcdefgh'],
+  ['an AWS key id', 'AKIAABCDEFGHIJKLMNOP'],
+  ['a private key', '-----BEGIN RSA PRIVATE KEY-----'],
+  ['a bearer header', 'Authorization: Bearer abcdefghijklmnopqrstuvwx'],
+  ['an assignment', 'password = hunter2hunter2']
+]) {
+  test(`a goal holding ${label} is refused and reported`, () => {
+    const { manifest, omitted } = buildHireManifest({ ...fullAgent(), goal: value });
+    assert.equal(manifest.goal, undefined);
+    assert.deepEqual(omitted, [{ field: 'goal', reason: 'secret' }]);
+    assert.ok(!JSON.stringify(manifest).includes(value));
+  });
+}
+
+for (const value of ['read C:\\Users\\sam\\repo\\notes', 'see /home/sam/repo', 'open /Users/sam/repo', 'in ~/secret']) {
+  test(`a goal naming a home path is refused: ${value.replace(/\\/g, "/")}`, () => {
+    const { manifest, omitted } = buildHireManifest({ ...fullAgent(), goal: value });
+    assert.equal(manifest.goal, undefined);
+    assert.deepEqual(omitted, [{ field: 'goal', reason: 'path' }]);
+  });
+}
+
+test('ordinary prose about tokens and paths is kept', () => {
+  const goal = 'Reduce token usage and tidy src/main/hire.ts. Rotate the password policy doc.';
+  assert.equal(buildHireManifest({ ...fullAgent(), goal }).manifest.goal, goal);
+});
+
+test('an engine agent files cannot carry drops the engine and its model, with reasons', () => {
+  const { manifest, omitted } = buildHireManifest({ ...fullAgent(), provider: 'gemini', model: 'gemini-3-pro' });
+  assert.equal(manifest.provider, undefined);
+  assert.equal(manifest.model, undefined);
+  assert.deepEqual(omitted, [
+    { field: 'provider', reason: 'unsupported-provider' },
+    { field: 'model', reason: 'needs-provider' }
+  ]);
+});
+
+test('over-long text and bad caps are refused, and the result still validates', () => {
+  const { manifest, omitted } = buildHireManifest({ ...fullAgent(), description: 'x'.repeat(201), goal: 'y'.repeat(4001), tokenCap: -1 });
+  assert.deepEqual(omitted.map((o) => [o.field, o.reason]), [['description', 'too-long'], ['goal', 'too-long'], ['tokenCap', 'invalid']]);
+  assert.equal(validateHireManifest(JSON.parse(JSON.stringify(manifest))).ok, true);
+});
+
+test('fields outside the export source cannot reach the file', () => {
+  const { manifest } = buildHireManifest({
+    ...fullAgent(), command: 'claude --dangerously-skip-permissions', cwd: '/home/sam/repo',
+    worktreePath: '/home/sam/wt', env: { API_KEY: 'hidden' }
+  });
+  const json = JSON.stringify(manifest);
+  for (const leak of ['dangerously', '/home/sam', 'hidden', 'commandFlags']) assert.ok(!json.includes(leak), leak);
+});
+
+test('a blank name is an error, not a broken file', () => {
+  const { manifest, errors } = buildHireManifest({ name: '   ' });
+  assert.equal(manifest, null);
+  assert.ok(errors.length > 0);
+});
+
+test('the main process refuses to save an invalid manifest', () => {
+  assert.equal(prepareHireExport({ spec: 'munder-difflin/hire@1', name: 'x', commandFlags: ['--dangerously-skip-permissions'] }).ok, false);
+  assert.equal(prepareHireExport('nope').ok, false);
+});
+
+test('a name with no usable characters still gets a safe file name', () => {
+  assert.equal(prepareHireExport({ spec: 'munder-difflin/hire@1', name: '../..' }).fileName, 'agent.hire.json');
+});
+
+test('there are 36 unique templates, each a valid manifest in a known category', () => {
+  assert.equal(HIRE_TEMPLATES.length, 36);
+  assert.equal(new Set(HIRE_TEMPLATES.map((t) => t.id)).size, 36);
+  for (const t of HIRE_TEMPLATES) {
+    assert.ok(HIRE_TEMPLATE_CATEGORIES.includes(t.category), t.id);
+    const v = validateHireManifest(templateManifest(t));
+    assert.deepEqual(v.errors, [], t.id);
+    assert.equal(v.ok, true, t.id);
+    assert.equal(v.manifest.provider, undefined, t.id);
+    assert.equal(buildHireManifest({ name: t.name, goal: t.goal, description: t.description }).omitted.length, 0, t.id);
+  }
+});

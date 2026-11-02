@@ -10,6 +10,7 @@ import { OFFICE_CAST, DEFAULT_CHARACTER, type OfficeCharacterName } from '@/scen
 import { type AccentColorName } from '@/design/tokens';
 import type { HireManifest } from '@shared/hire';
 import { hireQueueProgress } from '@shared/hireQueue';
+import { HireTemplatePicker } from './HireTemplatePicker';
 import { MCP_CATALOG } from '@shared/mcpCatalog';
 import {
   OSS_LOCAL_PICKS,
@@ -248,6 +249,7 @@ export function AddAgentModal({ onClose, config, onConfigChange }: AddAgentModal
   const [section, setSection] = useState<SectionKey>('identity');
   // "Generate a hire with AI" helper — reveals a copy-paste prompt (item 7).
   const [showHirePrompt, setShowHirePrompt] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const copyHirePrompt = async () => {
     try {
@@ -1139,7 +1141,19 @@ export function AddAgentModal({ onClose, config, onConfigChange }: AddAgentModal
               )}
             </div>
 
+            {showTemplates && (
+              <HireTemplatePicker onPick={(m) => { applyManifest(m); setShowTemplates(false); }} />
+            )}
+
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+              <PixelButton
+                variant="secondary"
+                size="md"
+                onClick={() => setShowTemplates((v) => !v)}
+                disabled={busy || !!pendingHire}
+              >
+                {tr('agentFiles.templatesButton')}
+              </PixelButton>
               <PixelButton
                 variant="secondary"
                 size="md"
