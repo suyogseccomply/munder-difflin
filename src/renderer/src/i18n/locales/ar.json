@@ -1645,5 +1645,13 @@
     "monthly": "شهريًا",
     "office": "المكتب",
     "used": "مستخدم {{value}}"
+  },
+  "tempRouting": {
+    "aTemp": "مؤقت",
+    "cloneOf": "مؤقت، نسخة من {{name}}",
+    "perAgent": "المؤقتون لكل وكيل",
+    "slackAnswerBy": "يجيب على Slack",
+    "webhookAnswerBy": "يجيب على الخطافات",
+    "orchestrator": "المنسق"
   }
 }

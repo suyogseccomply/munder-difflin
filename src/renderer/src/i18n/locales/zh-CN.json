@@ -1645,5 +1645,13 @@
     "monthly": "每月",
     "office": "办公室",
     "used": "已用 {{value}}"
+  },
+  "tempRouting": {
+    "aTemp": "一名临时工",
+    "cloneOf": "临时工，克隆自 {{name}}",
+    "perAgent": "每个智能体的临时工数",
+    "slackAnswerBy": "Slack 由谁回复",
+    "webhookAnswerBy": "Webhook 由谁回复",
+    "orchestrator": "协调者"
   }
 }

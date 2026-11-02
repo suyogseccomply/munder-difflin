@@ -231,6 +231,11 @@ export interface HarnessConfig {
   teamsRelayUrl?: string;
   /** Token limits per period, for the office and each agent. */
   tokenLimits?: { office?: Partial<Record<'fiveHour' | 'daily' | 'weekly' | 'monthly', number>>; agents?: { [agentId: string]: Partial<Record<'fiveHour' | 'daily' | 'weekly' | 'monthly', number>> } };
+  /** How many temps one lasting agent may run at once (0 to 4). */
+  tempsPerAgent?: number;
+  /** Who answers Slack and generic webhooks: an agent id, `temp`, or `temp:<id>`. Unset is the orchestrator. */
+  slackAnswerBy?: string;
+  webhookAnswerBy?: string;
   capabilityServers?: { [id: string]: { label: string; command: string; args: string[]; secretNames: string[] } };
   /** Enable semantic memory (MemPalace CLI). No-op if mempalace isn't installed. */
   semanticMemory: boolean;

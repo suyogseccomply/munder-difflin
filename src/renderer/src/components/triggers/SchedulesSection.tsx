@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { TempTargetOptions } from '../AnswerTargetOptions';
+import { parseTempTarget } from '@shared/tempRouting';
 import type { TFunction } from 'i18next';
 import { PixelButton } from '../PixelButton';
 import { useStore } from '@/store/store';
@@ -107,7 +109,8 @@ export function SchedulesSection({ onSummary }: { onSummary?: (s: string) => voi
   const whenIsUsable = !mWeekly || weeklyIsUsable(mWeekly);
 
   const targetName = (to: string) =>
-    to === 'broadcast' ? t('schedulesSection.everyone')
+    parseTempTarget(to) ? t('tempRouting.aTemp')
+    : to === 'broadcast' ? t('schedulesSection.everyone')
       : to === 'god' ? (agents.find((a) => a.isGod)?.name ?? 'the orchestrator')
         : agents.find((a) => a.id === to)?.name ?? to;
 
@@ -146,6 +149,7 @@ export function SchedulesSection({ onSummary }: { onSummary?: (s: string) => voi
               <option value="broadcast">{t('schedulesSection.everyone')}</option>
               <option value="god">{agents.find((a) => a.isGod)?.name ?? 'the orchestrator'}</option>
               {agents.filter((a) => !a.isGod).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              <TempTargetOptions />
             </Select>
           </Field>
           <Field label={t('schedulesSection.when')}>
@@ -291,6 +295,7 @@ function MissionRow({ mission, targetName, agents, onPatch, onDelete }: {
               <option value="broadcast">{t('schedulesSection.everyone')}</option>
               <option value="god">{agents.find((a) => a.isGod)?.name ?? 'the orchestrator'}</option>
               {agents.filter((a) => !a.isGod).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              <TempTargetOptions />
             </Select>
           </Field>
           <Field label={t('schedulesSection.when')}>

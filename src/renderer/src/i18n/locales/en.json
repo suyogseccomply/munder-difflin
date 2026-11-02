@@ -1645,5 +1645,13 @@
     "monthly": "Monthly",
     "office": "Office",
     "used": "{{value}} used"
+  },
+  "tempRouting": {
+    "aTemp": "A temp",
+    "cloneOf": "A temp, clone of {{name}}",
+    "perAgent": "Temps per agent",
+    "slackAnswerBy": "Slack is answered by",
+    "webhookAnswerBy": "Webhooks are answered by",
+    "orchestrator": "The orchestrator"
   }
 }

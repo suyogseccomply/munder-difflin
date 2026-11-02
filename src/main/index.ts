@@ -69,6 +69,7 @@ import { inboxNudgeText } from '../shared/hiveNudge';
 import { resolveGodName } from '../shared/godIdentity';
 import { fetchHireManifest, prepareHireExport, readHireManifestFiles } from './hire';
 import { loadCapabilityList } from './capabilityList';
+import { cloneFields, cloneObjective, parseTempTarget, requesterVerdict, tempsPerAgent, type CloneSource } from '../shared/tempRouting';
 import { LIMIT_PERIODS, limitBreaches, periodStart, type LimitPeriod } from '../shared/tokenLimits';
 import {
   HANDOFF_TIMEOUT_MS,
@@ -407,6 +408,9 @@ const integrationLogPath = (): string => join(app.getPath('userData'), 'integrat
 const workerHistoryPath = (): string => join(app.getPath('userData'), 'worker-history.json');
 
 interface WorkerRec {
+  requestedBy?: string;
+  /** Its MCP grants were copied from a source agent and go when it does. */
+  cloned?: boolean;
   objective?: string;
   provider?: string;
   /** Why it is being released. Unset at teardown means it died on its own. */
@@ -489,6 +493,11 @@ const preservedWorktrees = new Map<string, PreservedWorktree>();
 function recordWorkerEnd(id: string): void {
   const rec = liveWorkers.get(id);
   if (!rec) return;
+  if (rec.cloned) {
+    const grants = { ...readConfig().agentMcpGrants };
+    delete grants[id];
+    writeConfig({ agentMcpGrants: grants });
+  }
   appendLedger(workerHistoryPath(), {
     workerId: id,
     name: rec.name ?? id,
@@ -783,7 +792,7 @@ function syncMissions(): void {
         // we deliberately do NOT add `&& m.body`, so other (dispatch) missions keep
         // their prior behaviour, including the historical empty-body send (Pam N1).
         if (m.kind !== 'compact' && hive.enabled()) {
-          hive.send({ to: m.to, act: 'request', subject: m.label, body: m.body }, 'scheduler');
+          routeWork(m.to, m.label, m.body, 'scheduler');
         }
         // Auto-compact: do NOT jam /compact into busy terminals. Hand it to the
         // renderer, which queues a /compact per agent (deduped — never two at
@@ -1864,6 +1873,12 @@ async function startSlackServer(): Promise<{ ok: boolean; url?: string; error?: 
       // PROTOCOL carries THIS request's concrete channel, thread_ts, and the
       // resolved helper path — god hands the worker an exact reply command.
       // Server-side so it applies to every session.
+      const slackAnswerBy = readConfig().slackAnswerBy;
+      if (parseTempTarget(slackAnswerBy)) {
+        const filesNote = localFiles.length ? `\n\nAttached files:\n${localFiles.map((f) => (typeof f === 'string' ? f : JSON.stringify(f))).join('\n')}` : '';
+        routeWork(slackAnswerBy!, m.text.slice(0, 60) || 'Slack message', `${m.text}${filesNote}`, 'slack', { slack: { channel: m.channel, thread_ts: m.thread_ts } });
+        return;
+      }
       const ipcMsg: { text: string; channel: string; ts: string; thread_ts: string; autonomyPreamble: string; files?: typeof localFiles } = {
         text: m.text, channel: m.channel, ts: m.ts, thread_ts: m.thread_ts,
         autonomyPreamble: buildAutonomousRequestProtocol(m.channel, m.thread_ts, slackReplyScriptPath())
@@ -2051,13 +2066,13 @@ function dispatchWebhookWork(arg: {
   // updates that card's status/result for the caller's GET) — never the secret,
   // never the raw token.
   try {
-    hive.send({
-      to: 'god',
-      act: 'request',
-      subject: `[${arg.origin}] ${arg.title}`,
-      body: `${arg.message}\n\n(Inbound via the generic ${arg.origin} API, tracked as kanban card ${arg.taskId}. When this work is finished, set that card's status to 'done' and fill its 'result' so the caller's status check reflects the outcome.)`,
-      requires_reply: false
-    }, 'webhook');
+    const webhookBody = `${arg.message}\n\n(Inbound via the generic ${arg.origin} API, tracked as kanban card ${arg.taskId}. When this work is finished, set that card's status to 'done' and fill its 'result' so the caller's status check reflects the outcome.)`;
+    const answerBy = readConfig().webhookAnswerBy;
+    if (parseTempTarget(answerBy)) {
+      routeWork(answerBy!, `[${arg.origin}] ${arg.title}`, webhookBody, 'webhook');
+    } else {
+      hive.send({ to: 'god', act: 'request', subject: `[${arg.origin}] ${arg.title}`, body: webhookBody, requires_reply: false }, 'webhook');
+    }
   } catch (e) {
     console.error('[webhook] could not route to god:', e instanceof Error ? e.message : e);
   }
@@ -4859,7 +4874,64 @@ completionWatcher.start();
 
 /** A spawn-request god drops into HIVE_ROOT/spawn-requests/<id>.json. god authors
  *  these directly; `objective` and `cwd` are the only required fields. */
+/** Requests filed because a person chose "a temp". That choice is the spend decision,
+ *  so these don't need the orchestrator-may-spawn setting. */
+const ROUTED_REQUEST_PREFIX = 'route-';
+
+/** What a clone of this agent inherits: registry facts plus the roster's engine, goal
+ *  and look, which only the roster holds. */
+function cloneSourceFor(agentId: string): CloneSource | null {
+  const reg = hive.registry().agents[agentId];
+  if (!reg) return null;
+  const snap = roster.read();
+  const row = (snap?.agents as Array<Record<string, unknown>> | undefined)?.find((a) => a.id === agentId);
+  const text = (k: string): string | undefined => (typeof row?.[k] === 'string' ? row[k] as string : undefined);
+  return cloneFields({
+    provider: reg.provider, role: reg.role, capabilities: reg.capabilities, cwd: reg.cwd,
+    model: text('model'), command: text('command'), goal: text('goal'), character: text('character'), accent: text('accent')
+  });
+}
+
+/** Files a request atomically. A half-written file would be read as malformed. */
+function fileSpawnRequest(req: Partial<SpawnRequest>): { ok: true } | { ok: false; error: string } {
+  const dir = spawnRequestsDir();
+  if (!dir) return { ok: false, error: 'no hive open' };
+  try {
+    mkdirSync(dir, { recursive: true });
+    const id = `${ROUTED_REQUEST_PREFIX}${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`;
+    const tmp = join(dir, `${id}.tmp`);
+    const file = join(dir, `${id}.json`);
+    writeFileSync(tmp, JSON.stringify({ id, ...req }));
+    renameSync(tmp, file);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** Sends work to whoever was chosen: an agent as mail, or a new temp. */
+function routeWork(to: string, subject: string, body: string, from: string, extra: Partial<SpawnRequest> = {}): { ok: boolean; error?: string } {
+  const temp = parseTempTarget(to);
+  if (!temp) {
+    hive.send({ to, act: 'request', subject, body }, from);
+    return { ok: true };
+  }
+  const reg = hive.registry();
+  const godId = reg.godId ?? 'god';
+  return fileSpawnRequest({
+    objective: `${subject}\n\n${body}`,
+    name: subject.slice(0, 40),
+    cwd: reg.agents[temp.cloneOf ?? godId]?.cwd ?? reg.agents[godId]?.cwd,
+    cloneOf: temp.cloneOf,
+    ...extra
+  });
+}
+
 interface SpawnRequest {
+  /** An agent id to copy the role and engine from. */
+  cloneOf?: string;
+  /** The lasting agent that asked for this temp, for its per-agent limit. */
+  requestedBy?: string;
   id?: string;
   objective?: string;
   command?: string;                                   // engine CLI; default = config.defaultCommand
@@ -4972,7 +5044,29 @@ async function processSpawnRequest(filePath: string): Promise<void> {
     archiveRequest(filePath, '.failed');
   };
 
-  const objective = typeof raw.objective === 'string' ? raw.objective.trim() : '';
+  // Per-agent limit. The name is self-declared by whoever wrote the file, so this
+  // limits a well-behaved agent; the office-wide cap is the real bound.
+  const verdict = requesterVerdict(
+    raw.requestedBy,
+    hive.registry().godId ?? 'god',
+    [...liveWorkers.values()].filter((w) => w.requestedBy === raw.requestedBy).length,
+    tempsPerAgent(readConfig().tempsPerAgent)
+  );
+  if (verdict === 'refuse') { fail(`${String(raw.requestedBy)} is not allowed to start temps`); return; }
+  if (verdict === 'wait') return; // stays queued until one of its temps ends
+
+  const clone = typeof raw.cloneOf === 'string' ? cloneSourceFor(raw.cloneOf) : null;
+  if (typeof raw.cloneOf === 'string' && !clone) { fail(`cannot clone unknown agent "${raw.cloneOf}"`); return; }
+  if (clone) {
+    raw.provider = raw.provider ?? clone.provider as AgentProvider | undefined;
+    raw.command = raw.command ?? clone.command;
+    raw.model = raw.model ?? clone.model;
+    raw.cwd = raw.cwd ?? clone.cwd;
+    raw.character = raw.character ?? clone.character;
+    raw.accent = raw.accent ?? clone.accent;
+  }
+
+  const objective = cloneObjective(typeof raw.objective === 'string' ? raw.objective.trim() : '', clone?.goal);
   if (!objective) { fail('missing "objective"'); return; }
 
   const reqId = (typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : basename(filePath).replace(/\.json$/i, ''))
@@ -5021,8 +5115,17 @@ async function processSpawnRequest(filePath: string): Promise<void> {
     name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : `Worker ${reqId.slice(0, 12)}`,
     provider: raw.provider,
     role: 'worker',
+    capabilities: clone?.capabilities,
     cwd
   };
+  // A clone gets the source's MCP grants and token cap. Removed when it ends.
+  if (typeof raw.cloneOf === 'string') {
+    const cfgClone = readConfig();
+    const sourceGrants = cfgClone.agentMcpGrants?.[raw.cloneOf];
+    const sourceCap = cfgClone.agentTokenCaps?.[raw.cloneOf];
+    if (sourceGrants) writeConfig({ agentMcpGrants: { ...cfgClone.agentMcpGrants, [workerId]: sourceGrants } });
+    if (sourceCap && !raw.tokenCap) raw.tokenCap = sourceCap;
+  }
   // Phase 2: grant this worker a broker capability over the currently-enabled
   // integrations and inject the broker URL + a per-worker capability TOKEN (a handle,
   // never a secret) into its env, so it can reach registered REST integrations through
@@ -5074,7 +5177,7 @@ async function processSpawnRequest(filePath: string): Promise<void> {
   // tokenCap is optional plumbing (default unlimited) — only a positive finite cap is kept.
   const tokenCap = typeof raw.tokenCap === 'number' && Number.isFinite(raw.tokenCap) && raw.tokenCap > 0
     ? raw.tokenCap : undefined;
-  liveWorkers.set(workerId, { workerId, reqId, name: meta.name, slack, baseBranch, spawnedAt: Date.now(), tokenCap, objective, provider: raw.provider ?? 'claude' });
+  liveWorkers.set(workerId, { workerId, reqId, name: meta.name, slack, baseBranch, spawnedAt: Date.now(), tokenCap, objective, provider: raw.provider ?? 'claude', requestedBy: raw.requestedBy, cloned: typeof raw.cloneOf === 'string' });
 
   // Dispatch the objective via the standard inbox path (zero new transport),
   // reusing the autonomous-request preamble so the worker gets the exact Slack
@@ -5266,10 +5369,11 @@ async function ephemeralWorkerTick(): Promise<void> {
     //     Declining also means declining to CONSUME. A request dropped in while
     //     this is off stays in the queue and runs when it is turned on, rather
     //     than being eaten and failed for a reason god never asked about.
-    const dir = readConfig().orchestratorMaySpawn ? spawnRequestsDir() : null;
+    const dir = spawnRequestsDir();
+    const maySpawn = readConfig().orchestratorMaySpawn;
     if (dir && existsSync(dir)) {
       let files: string[] = [];
-      try { files = readdirSync(dir).filter(f => f.endsWith('.json')).sort(); } catch { /* dir vanished */ }
+      try { files = readdirSync(dir).filter(f => f.endsWith('.json') && (maySpawn || f.startsWith(ROUTED_REQUEST_PREFIX))).sort(); } catch { /* dir vanished */ }
       for (const f of files) {
         if (liveWorkers.size >= maxWorkers) break;
         await processSpawnRequest(join(dir, f));
@@ -5362,6 +5466,18 @@ ipcMain.handle('workers:list', (): { live: WorkerSnapshot[]; preserved: Preserve
  *  exit arrives the exit-handler's stale-id guard already misreads it as a
  *  reclaimed id and skips teardown — the worker would stay "live" in registry.json
  *  and fleet.json forever after this call. */
+/** Sends a capture or message to the chosen target, which may be a new temp. */
+ipcMain.handle('routing:send', (_evt, payload: unknown) => {
+  const p = (payload ?? {}) as { to?: unknown; subject?: unknown; body?: unknown };
+  if (typeof p.to !== 'string' || typeof p.subject !== 'string' || typeof p.body !== 'string') return { ok: false, error: 'bad request' };
+  try {
+    if (!parseTempTarget(p.to)) { hive.send({ to: p.to, act: 'inform', subject: p.subject, body: p.body }, 'human'); return { ok: true }; }
+    return routeWork(p.to, p.subject, p.body, 'human');
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+});
+
 ipcMain.handle('workers:history', () => readLedger(workerHistoryPath(), isWorkerHistoryRow));
 
 /** A person hiring a temp. Their click is the spend decision, so the
@@ -5675,7 +5791,7 @@ app.whenReady().then(() => {
   initTeams({
     relayUrl: () => readConfig().teamsRelayUrl,
     setRelayUrl: (teamsRelayUrl) => { writeConfig({ teamsRelayUrl }); },
-    deliverToAgent: (agentId, subject, body) => { hive.send({ to: agentId, act: 'inform', subject, body }, 'team-relay'); },
+    deliverToAgent: (agentId, subject, body) => { routeWork(agentId, subject, body, 'team-relay'); },
     webContents: () => liveWebContents() ?? null
   });
   initStapler({

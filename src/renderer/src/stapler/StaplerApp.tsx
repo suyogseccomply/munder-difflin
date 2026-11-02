@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { addShot, mergeSegments, normalizeRegion, searchMeetings, type MeetingSummary, type Region, type TranscriptSegment } from '@shared/stapler';
+import { TEMP_TARGET, cloneTarget } from '@shared/tempRouting';
 import { ClipRecorder, decodeToSamples, hasSound } from './audio';
 
 type Mode = 'menu' | 'shot' | 'meeting' | 'message' | 'meetings';
@@ -9,6 +10,7 @@ interface Target { id: string; name: string }
 interface Capture { dataUrl: string; width: number; height: number }
 
 const REGION_KEY = 'cth.stapler.lastRegion';
+const TARGET_KEY = 'cth.stapler.lastTarget';
 const CLIP_MS = 20_000;
 
 const panel: CSSProperties = { position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: 12, background: 'var(--cth-cream-100)', boxShadow: 'inset 0 0 0 1px var(--cth-ink-500)', fontFamily: 'var(--cth-font-ui)', color: 'var(--cth-ink-900)', overflow: 'auto', boxSizing: 'border-box' };
@@ -33,7 +35,8 @@ export function StaplerApp() {
   const [mode, setMode] = useState<Mode>('menu');
   const [invisible, setInvisible] = useState(false);
   const [targets, setTargets] = useState<Target[]>([]);
-  const [target, setTarget] = useState('god');
+  const [target, setTargetState] = useState(() => localStorage.getItem(TARGET_KEY) ?? 'god');
+  const setTarget = (v: string) => { setTargetState(v); localStorage.setItem(TARGET_KEY, v); };
   const [note, setNote] = useState('');
 
   // The window is transparent; only the panel or the mascot should paint.
@@ -52,7 +55,7 @@ export function StaplerApp() {
 
   const expand = (v: boolean) => { setOpen(v); void window.cth.staplerExpand(v); };
   const send = useCallback(async (subject: string, body: string): Promise<boolean> => {
-    const res = await window.cth.hiveSend({ to: target, act: 'inform', subject, body }, 'human');
+    const res = await window.cth.routingSend({ to: target, subject, body });
     setNote(res.ok ? t('stapler.sent') : (res.error ?? t('stapler.failed')));
     return res.ok;
   }, [target, t]);
@@ -85,6 +88,8 @@ export function StaplerApp() {
         <select value={target} onChange={(e) => setTarget(e.target.value)} style={field}>
           <option value="god">{t('stapler.orchestrator')}</option>
           {targets.filter((x) => x.id !== 'god').map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+          <option value={TEMP_TARGET}>{t('tempRouting.aTemp')}</option>
+          {targets.map((x) => <option key={`clone-${x.id}`} value={cloneTarget(x.id)}>{t('tempRouting.cloneOf', { name: x.name })}</option>)}
         </select>
       </label>
 

@@ -306,6 +306,11 @@ export interface HarnessConfig {
   teamsRelayUrl?: string;
   /** Token limits per period, for the office and each agent. */
   tokenLimits?: { office?: Partial<Record<'fiveHour' | 'daily' | 'weekly' | 'monthly', number>>; agents?: { [agentId: string]: Partial<Record<'fiveHour' | 'daily' | 'weekly' | 'monthly', number>> } };
+  /** How many temps one lasting agent may run at once (0 to 4). */
+  tempsPerAgent?: number;
+  /** Who answers Slack and generic webhooks: an agent id, `temp`, or `temp:<id>`. Unset is the orchestrator. */
+  slackAnswerBy?: string;
+  webhookAnswerBy?: string;
   capabilityServers?: { [id: string]: { label: string; command: string; args: string[]; secretNames: string[] } };
   semanticMemory: boolean;
   embeddingModel: 'minilm' | 'embeddinggemma';
@@ -881,6 +886,7 @@ const api = {
     return () => ipcRenderer.removeListener('teams:changed', listener);
   },
   tokenLimitsUsage: (): Promise<{ ready: boolean; office: Partial<Record<'fiveHour' | 'daily' | 'weekly' | 'monthly', number>>; agents: Record<string, Partial<Record<'fiveHour' | 'daily' | 'weekly' | 'monthly', number>>> }> => ipcRenderer.invoke('limits:usage'),
+  routingSend: (m: { to: string; subject: string; body: string }): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('routing:send', m),
   skillsLocal: (cwd?: string): Promise<LocalSkill[]> => ipcRenderer.invoke('skills:local', cwd),
   /** The browsable skills catalog (cached; `force` re-fetches). */
   skillsCatalog: (force?: boolean): Promise<{

@@ -21,6 +21,7 @@ import { OfficeThemePicker } from './OfficeThemePicker';
 import { McpDefaultsSettings } from './McpDefaultsSettings';
 import { CapabilitiesPanel } from './CapabilitiesPanel';
 import { TokenLimitsSettings } from './TokenLimitsSettings';
+import { AnswerBySettings, TempsPerAgentSetting } from './TempRoutingSettings';
 import { IntegrationsRegistry } from './IntegrationsRegistry';
 import { AiEnginesSettings } from './AiEnginesSettings';
 import { REALTIME_MODEL } from '@shared/realtimePricing';
@@ -1259,6 +1260,8 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
 
                   {/* AUTONOMY & BUDGETS — the safety tab */}
                   {activeSection === 'Autonomy & Budgets' && <TokenLimitsSettings />}
+                  {activeSection === 'Autonomy & Budgets' && <TempsPerAgentSetting config={config} />}
+                  {activeSection === 'Connections' && <AnswerBySettings config={config} />}
                   {activeSection === 'Autonomy & Budgets' && (
                     <>
                       <div>

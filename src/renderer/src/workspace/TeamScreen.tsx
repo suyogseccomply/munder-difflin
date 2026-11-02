@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PixelButton } from '@/components/PixelButton';
 import { useStore } from '@/store/store';
+import { TempTargetOptions } from '@/components/AnswerTargetOptions';
 
 type State = Extract<Awaited<ReturnType<typeof window.cth.teamsState>>, { ok: true }>['value'];
 type PeerRow = State['peers'][number];
@@ -113,6 +114,7 @@ function Chat({ peer, act }: {
           <select value={answerer} onChange={(e) => void act(() => window.cth.teamsSetAnswerer(peer.officeId, e.target.value || null))} style={input}>
             <option value="">{t('team.you')}</option>
             {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            <TempTargetOptions />
           </select>
         </label>
         <PixelButton size="sm" variant="ghost" onClick={() => void act(() => window.cth.teamsRemovePeer(peer.officeId))}>{t('team.remove')}</PixelButton>

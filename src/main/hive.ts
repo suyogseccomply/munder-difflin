@@ -38,6 +38,7 @@ import {
   type AgentProvider
 } from '../shared/agentProvider';
 import { resolveAgentMcp, type AgentMcpGrants, type CapabilityServer } from '../shared/capabilities';
+import { isHoldExempt } from '../shared/tempRouting';
 import { selectBroadcastTargets } from '../shared/broadcast';
 import { preferredAgentRole } from '../shared/agentRole';
 import { mergeTaskLedger } from '../shared/taskLedger';
@@ -235,7 +236,7 @@ function shortRand(): string {
 const PROXY_BIND_ATTEMPTS = 3;
 const PROXY_BIND_BACKOFF_MS = [250, 750];
 
-const MINE_IGNORE_LINES = ['settings.json', 'cursor.json', 'inbox/', 'outbox/', '.codex/'];
+const MINE_IGNORE_LINES = ['settings.json', 'cursor.json', 'inbox/', 'outbox/', 'held/', '.codex/'];
 
 /** Idempotently ensure `<agentDir>/.gitignore` excludes the non-memory files.
  *  Append-only: writes only the missing lines, leaving any existing entries. */
@@ -1171,6 +1172,7 @@ export class HiveManager {
         } catch { /* fleet is a cache — the registry above is the record */ }
       }
       this.appendLog({ kind: 'agent-hold', id, onHold: hold });
+      if (!hold) this.releaseHeld(id);
       return { ok: true, onHold: hold };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : String(e) };
@@ -1562,6 +1564,8 @@ export class HiveManager {
     // the operator turns it on after god was already running.
     const spawnQueueLine = meta.isGod && this.orchestratorMaySpawn()
       ? `SPAWNING A WORKER: you can start an ephemeral worker yourself by writing ONE JSON file into ${inRoot('spawn-requests')}/<id>.json. Required: \`objective\` (what the worker must do) and \`cwd\` (the repo it runs in). Optional: \`name\`, \`command\` (overrides the provider default), \`provider\` (selects its default CLI when command is omitted), \`model\`, \`isolate\` (default true = its own git worktree), \`tokenCap\`, and \`slack\` ({channel, thread_ts}) to route its failures back to a thread. The harness polls that directory, spawns \`worker-<id>\`, and moves the request to \`spawn-requests/.done/\` on success or \`.failed/\` with a reason. This is the ONLY way you can spawn; a hire manifest under research/hires/ needs the human to confirm it in the UI, so it is not a route you can complete on your own. Reuse an existing agent first, as above — a worker is a fresh spend every time.`
+      : !meta.isGod && !meta.isAssistant && meta.role !== 'worker' && this.orchestratorMaySpawn()
+      ? `STARTING A TEMP: for one self-contained job, you can start a short-lived agent by writing ONE JSON file into ${inRoot('spawn-requests')}/<id>.json with \`objective\`, \`cwd\` and \`requestedBy\` set to your own agent id "${meta.id}". Optional: \`name\`, \`cloneOf\` (an agent id to copy the role and engine from). Each temp spends tokens, and you have a limit on how many can run at once, so do small work yourself.`
       : '';
     const godLine = meta.isGod
       ? 'You are the GOD / ORCHESTRATOR of this hive — your job is to ORCHESTRATE, not to implement: maintain live situational awareness and delegate the work. (1) AWARENESS — always know what is going on: keep an accurate picture of every agent (active vs archived/idle), the task board, and all in-flight work; drain your inbox continually and triage every other agent\'s requests, answering clarifications so the team runs autonomously. (2) DELEGATE — decompose work and fan it out to the hive agents via their inboxes (route messages and assign owners; do not do their jobs); do NOT take on grunt implementation yourself. Stay aware of who is already on the floor and delegate OPPORTUNISTICALLY: BEFORE you spawn anything, CHECK THE LIVE ROSTER (active agents in registry.json + their state in fleet.json) and prefer routing to an EXISTING agent that fits — above all when the request names one ("ask Pam to…", "have Jim…"), route to that agent instead of reflexively creating a new one. Reuse an idle or already-running agent whose role matches; only spawn a fresh agent when no existing one is a sensible fit, and say that you checked. One capable owner beats a duplicate. (3) OWN ONLY THE IMPORTANT, high-leverage things — task decomposition, dispatch decisions, sign-offs, conflict resolution, branch integration, and final QA — and remain the sole scribe of board.md. You are otherwise fully autonomous — there is NO separate approval queue. For the genuinely critical (destructive actions, spending real money, scope changes, unresolvable conflicts), ask the human directly in your own session and let the tool-permission prompt gate the action; the human approves natively, including remotely from their phone via /remote-control. Keep the team unblocked. When you DISPATCH a task, write it as a 4-part contract so the agent can run autonomously: (1) OBJECTIVE — the concrete goal; (2) OUTPUT — the expected deliverable/format; (3) TOOLS — what to use or avoid, and any references to read instead of re-deriving; (4) BOUNDARIES — scope limits + the definition of done. Pass references (file paths, message ids, board sections), not pasted content — keep dispatches short.'
@@ -1675,6 +1679,7 @@ export class HiveManager {
     // Targets that actually took delivery. The log below reports these instead of
     // intent, so a bounced or dropped message can never read as delivered.
     const delivered: string[] = [];
+    const held = new Set<string>();
     for (const t of targets) {
       // The send-only prep assistant must never be a delivery target: it doesn't
       // drain an inbox, so direct mail to it would rot unread (observed live: a
@@ -1724,6 +1729,24 @@ export class HiveManager {
       // a terminal work-order handoff to its REPL (#53);
       // if the renderer is unavailable, bounce to god to relay. God is exempt
       // (the bounce target).
+      // A 1:1: the person has this agent to themselves, so everyone else's mail waits
+      // and is delivered when the hold ends. Mail already in its inbox isn't touched.
+      if (t !== godId && reg.agents[t]?.onHold && !isHoldExempt(msg.from)) {
+        if (this.holdMessage(msg, t)) {
+          held.add(t);
+          this.appendLog({ kind: 'held', from: msg.from, to: t, id: msg.id, act: msg.act });
+          const sender = reg.agents[msg.from];
+          if (msg.requires_reply && sender && !sender.archived) {
+            this.routeMessage(this.normalize({
+              to: msg.from,
+              act: 'inform',
+              subject: `[on hold] ${t} is in a 1:1 with the human: ${msg.subject}`,
+              body: `Your message to ${t} will be delivered when the 1:1 ends. If it can't wait, give the work to someone else.`
+            }, 'system'));
+          }
+          continue;
+        }
+      }
       if (t !== godId && !canReceiveInbox(reg.agents[t]?.provider)) {
         if (!this.emitTerminalHandoff(msg, t)) {
           this.bounceToGod(msg, godId, `[undeliverable — "${t}" runs ${reg.agents[t]?.provider ?? 'a hookless CLI'} and the terminal handoff failed (renderer unavailable); relay this to it] ${msg.subject}`);
@@ -1753,10 +1776,48 @@ export class HiveManager {
       }
     }
     this.appendLog({ kind: 'message', from: msg.from, to: msg.to, act: msg.act, subject: msg.subject, id: msg.id, delivered });
-    this.emitMessage(msg, targets);
+    this.emitMessage(msg, targets.filter((t) => !held.has(t)));
     // Main-process observer (e.g. the closing-time controller watching for the
     // team's ACKs and the god's COMPLETE). Best-effort, never breaks routing.
     try { this.routedObserver?.(msg, targets); } catch { /* observer error */ }
+  }
+
+  /** Parks one message for an agent on hold. A file per message, so it survives a
+   *  restart. The name sorts by arrival, and release uses that order. */
+  private holdMessage(msg: HiveMessage, agentId: string): boolean {
+    const root = this.root();
+    if (!root) return false;
+    try {
+      const dir = join(root, 'agents', agentId, 'held');
+      mkdirSync(dir, { recursive: true });
+      this.heldSeq += 1;
+      const stem = `${String(Date.now()).padStart(15, '0')}-${String(this.heldSeq).padStart(6, '0')}`;
+      this.writeJson(join(dir, `${stem}.json`), msg);
+      return true;
+    } catch (e) {
+      console.error('[hive] could not hold a message:', e);
+      return false;
+    }
+  }
+
+  private heldSeq = 0;
+
+  /** Delivers everything that waited, oldest first. A file is removed only once its
+   *  message has been routed, so a failure leaves it for the next release. */
+  private releaseHeld(agentId: string): void {
+    const root = this.root();
+    if (!root) return;
+    const dir = join(root, 'agents', agentId, 'held');
+    if (!existsSync(dir)) return;
+    for (const f of readdirSync(dir).filter((n) => n.endsWith('.json')).sort()) {
+      const path = join(dir, f);
+      try {
+        this.routeMessage(JSON.parse(readFileSync(path, 'utf8')) as HiveMessage);
+        rmSync(path, { force: true });
+      } catch (e) {
+        console.error('[hive] could not release a held message:', e);
+      }
+    }
   }
 
   /** Observer invoked for EVERY routed message with its resolved targets.
