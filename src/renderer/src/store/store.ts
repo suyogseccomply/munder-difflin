@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { QUEUE_EDIT_HOLD_MS, moveInList } from '@shared/workspace';
 import type { AccentColorName } from '@/design/tokens';
 import type { OfficeCharacterName } from '@/scene/office/cast';
 import type { ThemeId } from '@/scene/office/themeRegistry';
@@ -126,6 +127,8 @@ export interface QueuedMessage {
   ts: number;
   /** Slack-originated: thread coordinates so the office can reply in-thread. */
   slack?: { channel: string; thread_ts: string };
+  /** Delivery waits until this time while the person edits the message. */
+  editingUntil?: number;
   /** Optional override for the text actually typed into the agent's PTY. When set,
    *  the drain submits THIS instead of `text`, while UI/card surfaces keep using
    *  `text`. Used by Slack-origin work to carry the autonomy preamble to god's
@@ -159,7 +162,7 @@ export interface QueuedMessage {
 // 'files' retired in v0.3.4 (the per-agent IDE button superseded it) — a
 // persisted 'files' selection falls back to 'terminal' on load. 'git' added in
 // v0.3.4: at-a-glance branch/status/log without opening the IDE.
-export type SidebarTab = 'terminal' | 'messages' | 'traces' | 'git';
+export type SidebarTab = 'terminal' | 'messages' | 'traces' | 'git' | 'tasks';
 
 /** Lifecycle of the god agent ("Michael") bootstrap on launch.
  *  'booting' until his PTY is confirmed live, then 'ready' (or 'failed' if the
@@ -314,6 +317,9 @@ interface State {
   enqueuePendingHires: (manifests: readonly HireManifest[]) => void;
   finishPendingHire: () => void;
   clearPendingHires: () => void;
+  moveQueuedMessage: (agentId: string, messageId: string, direction: -1 | 1) => void;
+  holdQueuedForEdit: (agentId: string, messageId: string, holding: boolean) => void;
+  editQueuedMessage: (agentId: string, messageId: string, text: string) => void;
   setFullscreen: (id: string | null) => void;
   /** Move focus mode WITHOUT touching the preference. For the paths that re-home
    *  a focused agent that went away: the app is following the user, not being
@@ -950,6 +956,37 @@ export const useStore = create<State>((set, get) => ({
         ...current.filter((m) => m.id !== messageId)
       ];
       const messageQueues = { ...s.messageQueues, [agentId]: next };
+      persistQueues(messageQueues);
+      return { messageQueues };
+    }),
+  moveQueuedMessage: (agentId, messageId, direction) =>
+    set((s) => {
+      const current = s.messageQueues[agentId];
+      if (!current) return s;
+      const messageQueues = { ...s.messageQueues, [agentId]: moveInList(current, messageId, direction) };
+      persistQueues(messageQueues);
+      return { messageQueues };
+    }),
+  holdQueuedForEdit: (agentId, messageId, holding) =>
+    set((s) => {
+      const current = s.messageQueues[agentId];
+      if (!current) return s;
+      const until = holding ? Date.now() + QUEUE_EDIT_HOLD_MS : undefined;
+      const messageQueues = { ...s.messageQueues, [agentId]: current.map((m) => (m.id === messageId ? { ...m, editingUntil: until } : m)) };
+      persistQueues(messageQueues);
+      return { messageQueues };
+    }),
+  editQueuedMessage: (agentId, messageId, text) =>
+    set((s) => {
+      const current = s.messageQueues[agentId];
+      const trimmed = text.trim();
+      if (!current || !trimmed) return s;
+      const messageQueues = {
+        ...s.messageQueues,
+        // compactUsed described the old text. Messages with a separate instruction
+        // aren't offered for editing, since that instruction is what gets typed.
+        [agentId]: current.map((m) => (m.id === messageId ? { ...m, text: trimmed, editingUntil: undefined, compactUsed: undefined } : m))
+      };
       persistQueues(messageQueues);
       return { messageQueues };
     }),

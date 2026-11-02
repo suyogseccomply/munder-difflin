@@ -285,6 +285,7 @@ export function MessageQueueComposer({ agent }: MessageQueueComposerProps) {
         }}>
           {queue.map((m, i) => (
             <QueuedMessageRow
+                agentId={agent.id}
               key={m.id}
               index={i}
               message={m}
@@ -440,7 +441,8 @@ function useDeliveryPaused(agentId: string, active: boolean): boolean {
  * toggle only renders when the text actually clips, so short messages stay tidy.
  */
 function QueuedMessageRow(
-  { index, message, paused, onSendNow, onRemove }: {
+  { index, message, paused, onSendNow, onRemove, agentId }: {
+    agentId: string;
     index: number;
     message: QueuedMessage;
     /** Floor-wide auto-delivery is paused — offer the per-message override. */
@@ -453,6 +455,18 @@ function QueuedMessageRow(
   const rtl = useRtl();
   const [expanded, setExpanded] = useState(false);
   const [clipped, setClipped] = useState(false);
+  const [draft, setDraft] = useState<string | null>(null);
+  const moveQueued = useStore((s) => s.moveQueuedMessage);
+  const holdForEdit = useStore((s) => s.holdQueuedForEdit);
+  const editQueued = useStore((s) => s.editQueuedMessage);
+  const smallButton = { border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, fontFamily: 'var(--cth-font-ui)', fontSize: 12, lineHeight: '16px', color: 'var(--cth-ink-500)', textDecoration: 'underline' } as const;
+  const startEdit = () => { holdForEdit(agentId, message.id, true); setDraft(message.text); };
+  const cancelEdit = () => { holdForEdit(agentId, message.id, false); setDraft(null); };
+  const saveEdit = () => {
+    if (draft?.trim()) editQueued(agentId, message.id, draft);
+    else holdForEdit(agentId, message.id, false);
+    setDraft(null);
+  };
   const bodyRef = useRef<HTMLDivElement>(null);
 
   // Measure against the CLAMPED box, so the toggle survives being expanded (the
@@ -483,6 +497,29 @@ function QueuedMessageRow(
         color: 'var(--cth-ink-500)', lineHeight: '18px', flexShrink: 0
       }}>{`${index + 1}.`}</span>
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {draft !== null && (
+          <>
+            <textarea
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              aria-label={t('queueComposer.edit')}
+              rows={3}
+              style={{ width: '100%', boxSizing: 'border-box', padding: 4, border: 'none', outline: 'none', background: 'var(--cth-cream-100)', boxShadow: 'inset 0 0 0 1px var(--cth-ink-300)', fontFamily: 'var(--cth-font-ui)', fontSize: 12, color: 'var(--cth-ink-900)' }}
+            />
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button type="button" onClick={saveEdit} style={smallButton}>{t('queueComposer.saveEdit')}</button>
+              <button type="button" onClick={cancelEdit} style={smallButton}>{t('common.cancel')}</button>
+            </div>
+          </>
+        )}
+        {draft === null && (
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button type="button" onClick={() => moveQueued(agentId, message.id, -1)} style={smallButton}>{t('queueComposer.earlier')}</button>
+            <button type="button" onClick={() => moveQueued(agentId, message.id, 1)} style={smallButton}>{t('queueComposer.later')}</button>
+            {!message.instruction && <button type="button" onClick={startEdit} style={smallButton}>{t('queueComposer.edit')}</button>}
+          </div>
+        )}
         <div
           ref={bodyRef}
           dir={rtl ? 'auto' : undefined}

@@ -128,6 +128,7 @@
     "restoreAll": "restore all ({{count}})"
   },
   "sidebar": {
+    "tasks": "tasks",
     "terminal": "terminal",
     "git": "git",
     "messages": "messages",
@@ -1327,6 +1328,10 @@
     "priority": "Priority {{level}}/5"
   },
   "queueComposer": {
+    "earlier": "earlier",
+    "later": "later",
+    "edit": "edit",
+    "saveEdit": "save",
     "recording": "● recording — click stop to transcribe",
     "transcribing": "transcribing…",
     "voice": "voice",
@@ -1512,6 +1517,15 @@
     "keyFailed": "Could not save this key."
   },
   "workspace": {
+    "cards": "Cards",
+    "dateFilter": "Created",
+    "range_all": "Any time",
+    "range_today": "Today",
+    "range_week": "Last 7 days",
+    "range_month": "Last 30 days",
+    "addTicket": "add a ticket",
+    "ticketTitle": "What should this ticket say?",
+    "add": "add",
     "stapler": "Stapler",
     "screen_team": "Team",
     "nav": "Workspace",
@@ -1543,7 +1557,7 @@
     "asksYou": "asks you",
     "stale": "stale",
     "moveCard": "Move {{title}}",
-    "sendMoves": "send {{count}} moves",
+    "sendMoves": "send moves ({{count}})",
     "movesSubject": "Task moves from the human",
     "movesSent": "Sent to the orchestrator.",
     "col_todo": "To do",

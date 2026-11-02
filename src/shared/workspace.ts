@@ -79,3 +79,60 @@ export function sortAgentCards<T extends { name: string; status: string; isGod?:
   return agents.filter((a) => !a.isGod).sort((a, b) =>
     (STATUS_ORDER[a.status] ?? 6) - (STATUS_ORDER[b.status] ?? 6) || a.name.localeCompare(b.name));
 }
+
+// ─── Ticket keys ────────────────────────────────────────────────────────────
+
+export const DEFAULT_TICKET_PREFIX = 'MD';
+
+/** Letters and digits, starting with a letter, so keys read like V53-299. */
+export function cleanTicketPrefix(raw: unknown): string {
+  const s = typeof raw === 'string' ? raw.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) : '';
+  return /^[A-Z]/.test(s) ? s : DEFAULT_TICKET_PREFIX;
+}
+
+/** The next key, one above the highest in use. Other id styles are left alone. */
+export function nextTicketId(prefix: string, existing: readonly string[]): string {
+  const p = `${prefix}-`;
+  let top = 0;
+  for (const id of existing) {
+    if (!id.startsWith(p)) continue;
+    const n = Number(id.slice(p.length));
+    if (Number.isInteger(n) && n > top) top = n;
+  }
+  return `${p}${top + 1}`;
+}
+
+// ─── Task filters ───────────────────────────────────────────────────────────
+
+export type TaskDateRange = 'all' | 'today' | 'week' | 'month';
+
+/** Tasks made within the range. A card with no date is unknown, so it only shows
+ *  under All rather than passing for new. */
+export function inDateRange(createdAt: string | undefined, range: TaskDateRange, now: number): boolean {
+  if (range === 'all') return true;
+  const at = Date.parse(createdAt ?? '');
+  if (!Number.isFinite(at)) return false;
+  if (range === 'today') { const d = new Date(now); d.setHours(0, 0, 0, 0); return at >= d.getTime(); }
+  return now - at <= (range === 'week' ? 7 : 30) * 86_400_000;
+}
+
+/** The column a card shows in, once staged moves are counted. */
+export const stagedStatus = (task: { id: string; status: TaskStatus }, moves: readonly StagedMove[]): TaskStatus =>
+  moves.find((m) => m.taskId === task.id)?.to ?? task.status;
+
+// ─── Queue ──────────────────────────────────────────────────────────────────
+
+/** One place earlier or later. The first and last stay put at the ends. */
+export function moveInList<T extends { id: string }>(list: readonly T[], id: string, direction: -1 | 1): T[] {
+  const i = list.findIndex((x) => x.id === id);
+  const j = i + direction;
+  if (i < 0 || j < 0 || j >= list.length) return [...list];
+  const next = [...list];
+  [next[i], next[j]] = [next[j], next[i]];
+  return next;
+}
+
+/** How long a message being edited is held back. It lapses by itself, so a window
+ *  closed mid-edit can't block the queue for good. */
+export const QUEUE_EDIT_HOLD_MS = 10 * 60 * 1000;
+export const isEditHeld = (m: { editingUntil?: number }, now: number): boolean => (m.editingUntil ?? 0) > now;

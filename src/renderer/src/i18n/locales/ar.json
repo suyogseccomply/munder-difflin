@@ -128,6 +128,7 @@
     "restoreAll": "استعادة الكل ({{count}})"
   },
   "sidebar": {
+    "tasks": "المهام",
     "terminal": "الطرفية",
     "git": "git",
     "messages": "الرسائل",
@@ -1327,6 +1328,10 @@
     "priority": "الأولوية {{level}}/5"
   },
   "queueComposer": {
+    "earlier": "أبكر",
+    "later": "لاحقًا",
+    "edit": "تعديل",
+    "saveEdit": "حفظ",
     "recording": "● يسجّل — انقر إيقاف للتفريغ النصي",
     "transcribing": "جارٍ التفريغ النصي…",
     "voice": "صوت",
@@ -1512,6 +1517,15 @@
     "keyFailed": "تعذر حفظ هذا المفتاح."
   },
   "workspace": {
+    "cards": "البطاقات",
+    "dateFilter": "تاريخ الإنشاء",
+    "range_all": "أي وقت",
+    "range_today": "اليوم",
+    "range_week": "آخر 7 أيام",
+    "range_month": "آخر 30 يومًا",
+    "addTicket": "إضافة تذكرة",
+    "ticketTitle": "ما مضمون هذه التذكرة؟",
+    "add": "إضافة",
     "stapler": "الدبّاسة",
     "screen_team": "الفريق",
     "nav": "مساحة العمل",
@@ -1543,7 +1557,7 @@
     "asksYou": "تسألك",
     "stale": "راكدة",
     "moveCard": "نقل {{title}}",
-    "sendMoves": "إرسال {{count}} نقلات",
+    "sendMoves": "إرسال النقلات ({{count}})",
     "movesSubject": "نقل مهام من المستخدم",
     "movesSent": "أُرسلت إلى المنسق.",
     "col_todo": "للتنفيذ",

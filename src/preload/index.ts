@@ -311,6 +311,8 @@ export interface HarnessConfig {
   /** Who answers Slack and generic webhooks: an agent id, `temp`, or `temp:<id>`. Unset is the orchestrator. */
   slackAnswerBy?: string;
   webhookAnswerBy?: string;
+  /** Prefix for ticket keys, as in V53-299. */
+  ticketPrefix?: string;
   capabilityServers?: { [id: string]: { label: string; command: string; args: string[]; secretNames: string[] } };
   semanticMemory: boolean;
   embeddingModel: 'minilm' | 'embeddinggemma';
@@ -887,6 +889,7 @@ const api = {
   },
   tokenLimitsUsage: (): Promise<{ ready: boolean; office: Partial<Record<'fiveHour' | 'daily' | 'weekly' | 'monthly', number>>; agents: Record<string, Partial<Record<'fiveHour' | 'daily' | 'weekly' | 'monthly', number>>> }> => ipcRenderer.invoke('limits:usage'),
   routingSend: (m: { to: string; subject: string; body: string }): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('routing:send', m),
+  hiveCreateTicket: (t: { title: string; assignee: string }): Promise<{ ok: true; id: string } | { ok: false; error: string }> => ipcRenderer.invoke('hive:createTicket', t),
   skillsLocal: (cwd?: string): Promise<LocalSkill[]> => ipcRenderer.invoke('skills:local', cwd),
   /** The browsable skills catalog (cached; `force` re-fetches). */
   skillsCatalog: (force?: boolean): Promise<{

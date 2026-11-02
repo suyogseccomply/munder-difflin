@@ -69,6 +69,7 @@ import { inboxNudgeText } from '../shared/hiveNudge';
 import { resolveGodName } from '../shared/godIdentity';
 import { fetchHireManifest, prepareHireExport, readHireManifestFiles } from './hire';
 import { loadCapabilityList } from './capabilityList';
+import { cleanTicketPrefix } from '../shared/workspace';
 import { cloneFields, cloneObjective, parseTempTarget, requesterVerdict, tempsPerAgent, type CloneSource } from '../shared/tempRouting';
 import { LIMIT_PERIODS, limitBreaches, periodStart, type LimitPeriod } from '../shared/tokenLimits';
 import {
@@ -3433,6 +3434,7 @@ ipcMain.handle('config:update', (_evt, patch: Partial<HarnessConfig>) => {
   // config per tick so it gates immediately; this is for the PROMPT, which is
   // built per spawn, so flipping the toggle reaches god the next time he starts.
   if (typeof patch?.orchestratorMaySpawn === 'boolean') hive.setOrchestratorMaySpawn(patch.orchestratorMaySpawn);
+  if (patch?.ticketPrefix !== undefined) hive.setTicketPrefix(patch.ticketPrefix);
   if (!hiveWasEnabled && hive.enabled()) {
     console.log('[hive] harnessHome configured — bootstrapping hive services');
     try { bootstrapHiveServices(); } catch (e) { console.error('[hive] bootstrap after onboarding:', e); }
@@ -3714,6 +3716,23 @@ ipcMain.handle('hive:send', (_evt, partial: Partial<HiveMessage>, from: unknown)
   if (sender === 'human') analytics.trackMessageSent('hive');
   return { ok: true, message: msg };
 });
+/** "Add a ticket" from an idle agent's card: writes the card and tells the agent. */
+ipcMain.handle('hive:createTicket', (_evt, payload: unknown) => {
+  const p = (payload ?? {}) as { title?: unknown; assignee?: unknown };
+  const title = typeof p.title === 'string' ? p.title.trim().slice(0, 300) : '';
+  if (!title || typeof p.assignee !== 'string') return { ok: false as const, error: 'a ticket needs a title and an agent' };
+  try {
+    hive.setTicketPrefix(readConfig().ticketPrefix);
+    const task = hive.createTicket(cleanTicketPrefix(readConfig().ticketPrefix), {
+      title, assignee: p.assignee, status: 'todo', dependsOn: [], priority: 3, createdAt: new Date().toISOString()
+    } as Omit<HiveTask, 'id'>);
+    hive.send({ to: p.assignee, act: 'request', subject: `New ticket ${task.id}: ${title}`, body: `The human added ticket ${task.id} for you: ${title}. Move the card to doing when you start.` }, 'human');
+    return { ok: true as const, id: task.id };
+  } catch (e) {
+    return { ok: false as const, error: e instanceof Error ? e.message : String(e) };
+  }
+});
+
 ipcMain.handle('hive:addTask', (_evt, task: unknown) => {
   if (!task || typeof task !== 'object' || Array.isArray(task)
     || typeof (task as { id?: unknown }).id !== 'string') {
@@ -5549,6 +5568,7 @@ function bootstrapHiveServices(): void {
   });
   control.replaceAutoDeliveryPauses(readConfig().autoDeliveryPausedAgents ?? []);
   control.setFloorDeliveryPaused(readConfig().floorDeliveryPaused === true);
+  hive.setTicketPrefix(readConfig().ticketPrefix);
   archiveOrphanedAgents(); // #57/#58: archive stale archived:false entries with no live PTY
   hive.startRouter();
   startEphemeralWorkerWatcher(); // poll HIVE_ROOT/spawn-requests → ephemeral workers

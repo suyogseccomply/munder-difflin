@@ -21,8 +21,11 @@ import {
   isStaleTask,
   shiftColumn,
   sortAgentCards,
+  inDateRange,
   stageMove,
   stagedMovesMessage,
+  stagedStatus,
+  type TaskDateRange,
   type StagedMove,
   type TaskStatus,
   type WorkspaceScreen
@@ -200,7 +203,8 @@ function AgentGrid({ agents, tasks, onOpen }: { agents: Agent[]; tasks: HiveTask
       {agents.map((a) => {
         const ticket = tasks.find((x) => x.assignee === a.id && x.status !== 'done');
         return (
-          <button key={a.id} type="button" onClick={() => onOpen(a.id)} style={{ ...card, border: 'none', cursor: 'pointer', textAlign: 'start', display: 'flex', flexDirection: 'column', gap: 6, fontFamily: 'var(--cth-font-ui)' }}>
+          <div key={a.id} style={{ ...card, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <button type="button" onClick={() => onOpen(a.id)} style={{ all: 'unset', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 6, fontFamily: 'var(--cth-font-ui)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div style={{ width: 32, height: 32, overflow: 'hidden', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', background: `var(--cth-${a.accent}-light)` }}><SpritePortrait character={a.character} scale={1} /></div>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -215,8 +219,37 @@ function AgentGrid({ agents, tasks, onOpen }: { agents: Agent[]; tasks: HiveTask
               <div style={muted}>{t('workspace.context', { pct: Math.round((a.contextTokens / a.contextLimit) * 100) })}</div>
             )}
           </button>
+          {a.status === 'idle' && !ticket && <AddTicket agentId={a.id} />}
+          </div>
         );
       })}
+    </div>
+  );
+}
+
+function AddTicket({ agentId }: { agentId: string }) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState('');
+  const [note, setNote] = useState('');
+  if (!open) return <div><PixelButton size="sm" variant="secondary" onClick={() => setOpen(true)}>{t('workspace.addTicket')}</PixelButton></div>;
+  const save = async () => {
+    const res = await window.cth.hiveCreateTicket({ title, assignee: agentId });
+    if (res.ok) { setTitle(''); setOpen(false); setNote(''); } else setNote(res.error);
+  };
+  return (
+    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+      <input
+        autoFocus
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && title.trim()) void save(); }}
+        placeholder={t('workspace.ticketTitle')}
+        aria-label={t('workspace.ticketTitle')}
+        style={{ flex: 1, minWidth: 120, padding: '4px 6px', border: 'none', outline: 'none', background: 'var(--cth-paper-100)', boxShadow: 'inset 0 0 0 1px var(--cth-ink-100)', fontFamily: 'var(--cth-font-ui)', fontSize: 12, color: 'var(--cth-ink-900)' }}
+      />
+      <PixelButton size="sm" variant="primary" disabled={!title.trim()} onClick={() => void save()}>{t('workspace.add')}</PixelButton>
+      {note && <span style={{ fontSize: 11, color: 'var(--cth-coral)' }}>{note}</span>}
     </div>
   );
 }
@@ -237,15 +270,20 @@ function AgentRoom({ agent }: { agent: Agent }) {
 }
 
 const TASK_VIEW_KEY = 'cth.workspace.taskView';
+type TaskView = 'board' | 'list' | 'cards';
 
 function TasksScreen({ tasks, agents }: { tasks: HiveTask[]; agents: Agent[] }) {
   const { t } = useTranslation();
-  const [view, setView] = useState<'board' | 'list'>(() => (localStorage.getItem(TASK_VIEW_KEY) === 'list' ? 'list' : 'board'));
+  const [view, setView] = useState<TaskView>(() => {
+    const saved = localStorage.getItem(TASK_VIEW_KEY);
+    return saved === 'list' || saved === 'cards' ? saved : 'board';
+  });
+  const [range, setRange] = useState<TaskDateRange>('all');
   const [moves, setMoves] = useState<StagedMove[]>([]);
   const [note, setNote] = useState('');
-  const pick = (v: 'board' | 'list') => { setView(v); localStorage.setItem(TASK_VIEW_KEY, v); };
+  const pick = (v: TaskView) => { setView(v); localStorage.setItem(TASK_VIEW_KEY, v); };
 
-  const stagedTo = (task: HiveTask): TaskStatus => moves.find((m) => m.taskId === task.id)?.to ?? task.status;
+  const stagedTo = (task: HiveTask): TaskStatus => stagedStatus(task, moves);
   const stage = (task: HiveTask, to: TaskStatus) => setMoves((m) => stageMove(m, task, to));
   const onKey = (e: KeyboardEvent, task: HiveTask) => {
     const rtl = document.documentElement.dir === 'rtl';
@@ -261,26 +299,60 @@ function TasksScreen({ tasks, agents }: { tasks: HiveTask[]; agents: Agent[] }) 
   };
   const nameOf = (id?: string) => agents.find((a) => a.id === id)?.name ?? id ?? t('workspace.unassigned');
   const now = Date.now();
+  const shown = tasks.filter((x) => inDateRange(x.createdAt, range, now));
+
+  const moveMenu = (task: HiveTask) => (
+    <select
+      value={stagedTo(task)}
+      onChange={(e) => stage(task, e.target.value as TaskStatus)}
+      aria-label={t('workspace.moveCard', { title: task.title })}
+      style={{ fontFamily: 'var(--cth-font-ui)', fontSize: 12, color: 'var(--cth-ink-900)', background: 'var(--cth-paper-100)', border: 'none', boxShadow: 'inset 0 0 0 1px var(--cth-ink-100)', padding: '2px 4px' }}
+    >
+      {TASK_COLUMNS.map((c) => <option key={c} value={c}>{t(`workspace.col_${c}`)}</option>)}
+    </select>
+  );
+  const chips = (task: HiveTask) => (
+    <>
+      {waitsOnHuman(task) && <span style={{ fontSize: 11, padding: '0 5px', background: 'var(--cth-coral-light)', color: 'var(--cth-ink-900)' }}>{t('workspace.asksYou')}</span>}
+      {isStaleTask(task, now) && <span style={{ fontSize: 11, padding: '0 5px', background: 'var(--cth-lemon-light)', color: 'var(--cth-ink-900)' }}>{t('workspace.stale')}</span>}
+    </>
+  );
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', padding: 8, flexShrink: 0 }}>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', padding: 8, flexShrink: 0, flexWrap: 'wrap' }}>
         <PixelButton size="sm" variant={view === 'board' ? 'primary' : 'secondary'} onClick={() => pick('board')}>{t('workspace.board')}</PixelButton>
         <PixelButton size="sm" variant={view === 'list' ? 'primary' : 'secondary'} onClick={() => pick('list')}>{t('workspace.list')}</PixelButton>
+        <PixelButton size="sm" variant={view === 'cards' ? 'primary' : 'secondary'} onClick={() => pick('cards')}>{t('workspace.cards')}</PixelButton>
+        <select value={range} onChange={(e) => setRange(e.target.value as TaskDateRange)} aria-label={t('workspace.dateFilter')} style={{ fontFamily: 'var(--cth-font-ui)', fontSize: 12, color: 'var(--cth-ink-900)', background: 'var(--cth-paper-100)', border: 'none', boxShadow: 'inset 0 0 0 1px var(--cth-ink-100)', padding: '3px 4px' }}>
+          {(['all', 'today', 'week', 'month'] as const).map((r) => <option key={r} value={r}>{t(`workspace.range_${r}`)}</option>)}
+        </select>
         <span style={{ flex: 1 }} />
         {note && <span style={muted}>{note}</span>}
-        {view === 'list' && moves.length > 0 && (
+        {moves.length > 0 && (
           <PixelButton size="sm" variant="primary" onClick={() => void send()}>{t('workspace.sendMoves', { count: moves.length })}</PixelButton>
         )}
       </div>
       {view === 'board'
-        ? <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}><TasksKanban /></div>
-        : (
+        ? <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}><TasksKanban stagedMoves={moves} onStage={stage} visible={(x) => inDateRange(x.createdAt, range, now)} /></div>
+        : view === 'cards' ? (
+          <div style={{ ...scroll, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 8, alignContent: 'start' }}>
+            {shown.length === 0 && <span style={muted}>{t('workspace.noTasks')}</span>}
+            {shown.map((task) => (
+              <div key={task.id} tabIndex={0} role="group" aria-label={task.title} onKeyDown={(e) => onKey(e, task)} style={{ ...card, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <button type="button" onClick={() => useStore.getState().openTaskDetail(task.id)} style={{ all: 'unset', cursor: 'pointer', fontSize: 13, color: 'var(--cth-ink-900)' }}>{task.title}</button>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}><span style={muted}>{task.id}</span>{chips(task)}</div>
+                <span style={muted}>{nameOf(task.assignee)}</span>
+                {moveMenu(task)}
+              </div>
+            ))}
+          </div>
+        ) : (
           <div style={scroll}>
             <p style={{ ...muted, marginTop: 0 }}>{t('workspace.listHint')}</p>
-            {tasks.length === 0 && <span style={muted}>{t('workspace.noTasks')}</span>}
+            {shown.length === 0 && <span style={muted}>{t('workspace.noTasks')}</span>}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {tasks.map((task) => (
+              {shown.map((task) => (
                 <div
                   key={task.id}
                   tabIndex={0}
@@ -292,17 +364,9 @@ function TasksScreen({ tasks, agents }: { tasks: HiveTask[]; agents: Agent[] }) 
                 >
                   <span style={muted}>{task.id}</span>
                   <span style={{ flex: 1, minWidth: 160, fontSize: 13, color: 'var(--cth-ink-900)' }}>{task.title}</span>
-                  {waitsOnHuman(task) && <span style={{ fontSize: 11, padding: '0 5px', background: 'var(--cth-coral-light)', color: 'var(--cth-ink-900)' }}>{t('workspace.asksYou')}</span>}
-                  {isStaleTask(task, now) && <span style={{ fontSize: 11, padding: '0 5px', background: 'var(--cth-lemon-light)', color: 'var(--cth-ink-900)' }}>{t('workspace.stale')}</span>}
+                  {chips(task)}
                   <span style={muted}>{nameOf(task.assignee)}</span>
-                  <select
-                    value={stagedTo(task)}
-                    onChange={(e) => stage(task, e.target.value as TaskStatus)}
-                    aria-label={t('workspace.moveCard', { title: task.title })}
-                    style={{ fontFamily: 'var(--cth-font-ui)', fontSize: 12, color: 'var(--cth-ink-900)', background: 'var(--cth-paper-100)', border: 'none', boxShadow: 'inset 0 0 0 1px var(--cth-ink-100)', padding: '2px 4px' }}
-                  >
-                    {TASK_COLUMNS.map((c) => <option key={c} value={c}>{t(`workspace.col_${c}`)}</option>)}
-                  </select>
+                  {moveMenu(task)}
                 </div>
               ))}
             </div>

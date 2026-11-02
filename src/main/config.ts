@@ -236,6 +236,8 @@ export interface HarnessConfig {
   /** Who answers Slack and generic webhooks: an agent id, `temp`, or `temp:<id>`. Unset is the orchestrator. */
   slackAnswerBy?: string;
   webhookAnswerBy?: string;
+  /** Prefix for ticket keys, as in V53-299. */
+  ticketPrefix?: string;
   capabilityServers?: { [id: string]: { label: string; command: string; args: string[]; secretNames: string[] } };
   /** Enable semantic memory (MemPalace CLI). No-op if mempalace isn't installed. */
   semanticMemory: boolean;

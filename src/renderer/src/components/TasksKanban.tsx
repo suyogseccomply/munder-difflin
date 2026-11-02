@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { stagedStatus, type StagedMove } from '@shared/workspace';
 import { useTranslation } from 'react-i18next';
 import { PixelPanel } from './PixelPanel';
 import { PixelButton } from './PixelButton';
@@ -94,7 +95,8 @@ export function parseTasks(raw: unknown): HiveTask[] {
         ? (t.status as Status) : 'todo',
       dependsOn: Array.isArray(t.dependsOn) ? t.dependsOn.filter((d): d is string => typeof d === 'string') : [],
       priority: typeof t.priority === 'number' ? t.priority : 3,
-      createdAt: typeof t.createdAt === 'string' ? t.createdAt : new Date().toISOString(),
+      // Blank, not "now": a made-up date would make an undated card look new at every poll.
+      createdAt: typeof t.createdAt === 'string' ? t.createdAt : '',
       humanQA: Array.isArray(t.humanQA)
         ? (t.humanQA as unknown[])
           .filter((e): e is Record<string, unknown> => !!e && typeof e === 'object' && typeof (e as { q?: unknown }).q === 'string')
@@ -117,7 +119,15 @@ export function parseTasks(raw: unknown): HiveTask[] {
  * is the ledger's writer: new work enters via the dispatch box (mailed to the
  * god), never by the human inserting cards the orchestrator never heard about.
  */
-export function TasksKanban() {
+export interface TasksKanbanProps {
+  /** With these, cards can be dragged between columns as staged moves. */
+  stagedMoves?: readonly StagedMove[];
+  onStage?: (task: HiveTask, to: Status) => void;
+  /** Hides cards that fail this, without touching the data. */
+  visible?: (task: HiveTask) => boolean;
+}
+
+export function TasksKanban({ stagedMoves, onStage, visible }: TasksKanbanProps = {}) {
   const { t } = useTranslation();
   const agents = useStore((s) => s.agents);
   const [tasks, setTasks] = useState<HiveTask[]>([]);
@@ -183,9 +193,16 @@ export function TasksKanban() {
         flex: 1, minHeight: 0, display: 'flex', gap: 8, padding: 10, overflowX: 'auto'
       }}>
         {COLUMNS.map((col) => {
-          const cards = tasks.filter((t) => t.status === col.key);
+          const cards = tasks.filter((t) => stagedStatus(t, stagedMoves ?? []) === col.key && (!visible || visible(t)));
           return (
-            <div key={col.key} style={{
+            <div
+              key={col.key}
+              onDragOver={onStage ? (e) => e.preventDefault() : undefined}
+              onDrop={onStage ? (e) => {
+                const dropped = tasks.find((x) => x.id === e.dataTransfer.getData('text/plain'));
+                if (dropped) onStage(dropped, col.key);
+              } : undefined}
+              style={{
               flex: '1 1 0', minWidth: 170, display: 'flex', flexDirection: 'column',
               background: 'var(--cth-cream-100)', boxShadow: 'inset 0 0 0 1px var(--cth-ink-300)'
             }}>
@@ -209,6 +226,7 @@ export function TasksKanban() {
                     assigneeName={nameFor(t.assignee)}
                     onOpen={() => openTaskDetail(t.id)}
                     onDismiss={() => dismissTask(t.id)}
+                    draggable={!!onStage}
                   />
                 ))}
               </div>
@@ -226,7 +244,8 @@ export function TasksKanban() {
 // lives in the detail view a click away: a kanban card can carry little more
 // than a title.
 
-function TaskCard({ task, accent, assigneeName, onOpen, onDismiss }: {
+function TaskCard({ task, accent, assigneeName, onOpen, onDismiss, draggable }: {
+  draggable?: boolean;
   task: HiveTask;
   accent: string;
   assigneeName?: string;
@@ -235,7 +254,10 @@ function TaskCard({ task, accent, assigneeName, onOpen, onDismiss }: {
 }) {
   const { t } = useTranslation();
   return (
-    <div style={{ position: 'relative', display: 'flex' }}>
+    <div
+      draggable={draggable}
+      onDragStart={draggable ? (e) => e.dataTransfer.setData('text/plain', task.id) : undefined}
+      style={{ position: 'relative', display: 'flex' }}>
       <button
         onClick={onOpen}
         title={t('kanban.openTaskDetails')}

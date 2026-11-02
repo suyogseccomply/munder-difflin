@@ -19,6 +19,7 @@ import { Icon } from './Icon';
 import { AgentNameEditor } from './AgentNameEditor';
 import { useStore, type Agent } from '@/store/store';
 import { usePtyParser } from '@/hooks/usePtyParser';
+import { AgentTasksTab } from './AgentTasksTab';
 import { inferAgentProvider } from '@/store/config';
 
 export interface AgentDetailPanelProps {
@@ -273,6 +274,8 @@ export function AgentDetailPanel({ agent }: AgentDetailPanelProps) {
             </EmptyTab>
           )
         )}
+
+        {sidebarTab === 'tasks' && <AgentTasksTab agentId={agent.id} />}
 
         {sidebarTab === 'git' && (
           <GitTab cwd={agent.cwd} />

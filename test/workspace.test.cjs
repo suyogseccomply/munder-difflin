@@ -57,3 +57,57 @@ test('cards put people-blocking agents first and leave out the orchestrator', ()
   ]).map((a) => a.name);
   assert.deepEqual(order, ['Stuck', 'Busy', 'Idle']);
 });
+
+// ─── Tickets, filters and the queue ─────────────────────────────────────────
+
+const { cleanTicketPrefix, inDateRange, isEditHeld, moveInList, nextTicketId, stagedStatus } = loadTs('src/shared/workspace.ts');
+const { parseTasks } = (() => { try { return loadTs('src/renderer/src/components/TasksKanban.tsx'); } catch { return {}; } })();
+
+test('ticket keys count up from the highest in use and ignore other id styles', () => {
+  assert.equal(nextTicketId('V53', []), 'V53-1');
+  assert.equal(nextTicketId('V53', ['V53-298', 'V53-2', 'bmt-900', 'V53-x', 'webhook-abc', 'V53-1.5']), 'V53-299');
+  assert.equal(nextTicketId('V5', ['V53-298']), 'V5-1');
+});
+
+test('a ticket prefix is letters and digits starting with a letter', () => {
+  assert.equal(cleanTicketPrefix('v53'), 'V53');
+  assert.equal(cleanTicketPrefix('a-b c'), 'ABC');
+  for (const bad of ['', '123', null, undefined, '!!']) assert.equal(cleanTicketPrefix(bad), 'MD', String(bad));
+});
+
+test('date ranges work, and an undated card shows only under All', () => {
+  const now = new Date(2026, 10, 10, 15).getTime();
+  const at = (d) => new Date(2026, 10, d, 9).toISOString();
+  assert.equal(inDateRange(at(10), 'today', now), true);
+  assert.equal(inDateRange(at(9), 'today', now), false);
+  assert.equal(inDateRange(at(5), 'week', now), true);
+  assert.equal(inDateRange(at(1), 'week', now), false);
+  assert.equal(inDateRange(at(1), 'month', now), true);
+  for (const missing of ['', undefined, 'nonsense']) {
+    assert.equal(inDateRange(missing, 'today', now), false);
+    assert.equal(inDateRange(missing, 'all', now), true);
+  }
+});
+
+test('a staged move changes the column shown, not the card', () => {
+  const task = { id: 'a', status: 'todo' };
+  assert.equal(stagedStatus(task, [{ taskId: 'a', title: 'A', to: 'done' }]), 'done');
+  assert.equal(stagedStatus(task, [{ taskId: 'b', title: 'B', to: 'done' }]), 'todo');
+  assert.equal(task.status, 'todo');
+});
+
+test('a queued message moves one place and stops at the ends', () => {
+  const q = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+  assert.deepEqual(moveInList(q, 'b', -1).map((x) => x.id), ['b', 'a', 'c']);
+  assert.deepEqual(moveInList(q, 'b', 1).map((x) => x.id), ['a', 'c', 'b']);
+  assert.deepEqual(moveInList(q, 'a', -1).map((x) => x.id), ['a', 'b', 'c']);
+  assert.deepEqual(moveInList(q, 'c', 1).map((x) => x.id), ['a', 'b', 'c']);
+  assert.deepEqual(moveInList(q, 'zzz', 1).map((x) => x.id), ['a', 'b', 'c']);
+  assert.deepEqual(q.map((x) => x.id), ['a', 'b', 'c'], 'the original is untouched');
+});
+
+test('an edit hold lapses, so a closed window cannot block the queue for good', () => {
+  assert.equal(isEditHeld({ editingUntil: 100 }, 50), true);
+  assert.equal(isEditHeld({ editingUntil: 100 }, 100), false);
+  assert.equal(isEditHeld({}, 50), false);
+});

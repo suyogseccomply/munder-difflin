@@ -125,3 +125,12 @@ test('spawn requests can be filed by a person even with orchestrator spawning of
   assert.match(src, /ROUTED_REQUEST_PREFIX/);
   assert.match(src, /renameSync\(tmp, file\)/);
 });
+
+test('two tickets at once get different keys, and other cards survive', () => withHive((hive, root) => {
+  addAgents(hive, root);
+  hive.addTask({ id: 'bmt-1', title: 'old', status: 'todo', dependsOn: [], priority: 3, createdAt: '' });
+  const a = hive.createTicket('V53', { title: 'A', status: 'todo', dependsOn: [], priority: 3, createdAt: '' });
+  const b = hive.createTicket('V53', { title: 'B', status: 'todo', dependsOn: [], priority: 3, createdAt: '' });
+  assert.deepEqual([a.id, b.id], ['V53-1', 'V53-2']);
+  assert.deepEqual(hive.tasks().tasks.map((t) => t.id), ['bmt-1', 'V53-1', 'V53-2']);
+}));

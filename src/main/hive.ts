@@ -39,6 +39,7 @@ import {
 } from '../shared/agentProvider';
 import { resolveAgentMcp, type AgentMcpGrants, type CapabilityServer } from '../shared/capabilities';
 import { isHoldExempt } from '../shared/tempRouting';
+import { cleanTicketPrefix, nextTicketId } from '../shared/workspace';
 import { selectBroadcastTargets } from '../shared/broadcast';
 import { preferredAgentRole } from '../shared/agentRole';
 import { mergeTaskLedger } from '../shared/taskLedger';
@@ -438,6 +439,9 @@ export class HiveManager {
   setOrchestratorMaySpawn(on: boolean): void {
     this._maySpawn = on;
   }
+  private ticketPrefix = cleanTicketPrefix(undefined);
+  setTicketPrefix(raw: unknown): void { this.ticketPrefix = cleanTicketPrefix(raw); }
+
   orchestratorMaySpawn(): boolean {
     return this._maySpawn;
   }
@@ -1591,6 +1595,7 @@ export class HiveManager {
       knowledgeLine,
       godLine,
       spawnQueueLine,
+      meta.isGod ? `TICKET KEYS: give each new card in tasks.json an id made of the prefix ${this.ticketPrefix} and the next number, like ${this.ticketPrefix}-12. Check the highest number in the file first.` : '',
       runtimeLine,
       slackLine,
       ctxLine,
@@ -1984,6 +1989,16 @@ export class HiveManager {
     if (tasks.some((current) => current?.id === task.id)) return false;
     this.writeTasks([...tasks, task]);
     return true;
+  }
+
+  /** Adds a card with the next key for this prefix. Read and written with no await
+   *  between, so two tickets can't take the same number. */
+  createTicket(prefix: string, card: Omit<HiveTask, 'id'>): HiveTask {
+    const ledger = this.tasks() as { tasks?: HiveTask[] };
+    const tasks = Array.isArray(ledger?.tasks) ? ledger.tasks : [];
+    const task = { ...card, id: nextTicketId(prefix, tasks.map((t) => String(t?.id ?? ''))) } as HiveTask;
+    this.writeTasks([...tasks, task]);
+    return task;
   }
 
   /** Patch one card against the latest on-disk ledger, preserving unrelated
