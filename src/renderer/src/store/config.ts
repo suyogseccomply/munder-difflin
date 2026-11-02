@@ -89,6 +89,8 @@ export interface HarnessConfig {
   floorDeliveryPaused?: boolean;
   /** Which shell the app shows. Classic unless the user switches. */
   workspaceView?: 'classic' | 'workspace';
+  /** Local speech model for the Stapler. Standard unless the user picks the larger one. */
+  staplerModel?: 'standard' | 'larger';
   capabilityServers?: { [id: string]: { label: string; command: string; args: string[]; secretNames: string[] } };
   semanticMemory: boolean;
   embeddingModel: 'minilm' | 'embeddinggemma';

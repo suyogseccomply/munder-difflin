@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { StaplerApp } from './stapler/StaplerApp';
 import brandLogo from '@brand/logo.png?url';
 import './design/global.css';
 import './i18n';
@@ -25,6 +26,6 @@ if (!root) throw new Error('No root element');
 
 createRoot(root).render(
   <StrictMode>
-    <App />
+    {window.location.hash === '#stapler' ? <StaplerApp /> : <App />}
   </StrictMode>
 );

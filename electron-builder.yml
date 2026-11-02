@@ -80,6 +80,8 @@ asarUnpack:
   - "**/node_modules/node-pty/**"
   # better-sqlite3 is native (bindings/prebuild need the .node on the real FS).
   - "**/node_modules/better-sqlite3/**"
+  # ONNX Runtime (local speech for the Stapler) loads a native binding and DLLs.
+  - "**/node_modules/onnxruntime-node/**"
 
 # Rebuild native deps (node-pty) for the target during packaging.
 npmRebuild: true

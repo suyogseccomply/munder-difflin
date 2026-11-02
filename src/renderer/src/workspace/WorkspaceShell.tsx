@@ -118,6 +118,7 @@ export function WorkspaceShell() {
               {t(`workspace.screen_${key}`)}
             </NavButton>
           ))}
+          <NavButton active={false} onClick={() => void window.cth.staplerToggle()}>{t('workspace.stapler')}</NavButton>
           <div style={{ ...muted, padding: '8px 10px 2px' }}>{t('workspace.agents')}</div>
           <NavButton active={screen === 'agents' && !room} onClick={() => { setRoom(null); setScreen('agents'); }}>{t('workspace.allAgents')}</NavButton>
           {others.map((a) => (

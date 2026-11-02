@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'ele
 import type { AgentProvider } from '../shared/agentProvider';
 import type { HireManifest } from '../shared/hire';
 import type { CapabilityList } from '../shared/capabilities';
+import type { MeetingSummary, TranscriptSegment } from '../shared/stapler';
 import type { IntegrationEvent, WorkerHistoryRow } from '../main/jsonLedger';
 export type { HireManifest } from '../shared/hire';
 
@@ -296,6 +297,8 @@ export interface HarnessConfig {
   floorDeliveryPaused?: boolean;
   /** Which shell the app shows. Classic unless the user switches. */
   workspaceView?: 'classic' | 'workspace';
+  /** Local speech model for the Stapler. Standard unless the user picks the larger one. */
+  staplerModel?: 'standard' | 'larger';
   capabilityServers?: { [id: string]: { label: string; command: string; args: string[]; secretNames: string[] } };
   semanticMemory: boolean;
   embeddingModel: 'minilm' | 'embeddinggemma';
@@ -836,6 +839,24 @@ const api = {
   workersStart: (req: { objective: string; name?: string; cwd?: string }): Promise<{ ok: true } | { ok: false; error: string }> =>
     ipcRenderer.invoke('workers:start', req),
   integrationsLog: (id: string): Promise<IntegrationEvent[]> => ipcRenderer.invoke('integrations:log', id),
+  // ─── The Stapler ─────────────────────────────────────────────────────────
+  staplerToggle: (): Promise<boolean> => ipcRenderer.invoke('stapler:toggle'),
+  staplerIsOpen: (): Promise<boolean> => ipcRenderer.invoke('stapler:isOpen'),
+  staplerExpand: (expanded: boolean): Promise<void> => ipcRenderer.invoke('stapler:expand', expanded),
+  staplerCapture: (): Promise<{ ok: true; dataUrl: string; width: number; height: number } | { ok: false; error: string }> => ipcRenderer.invoke('stapler:capture'),
+  staplerEndCapture: (): Promise<void> => ipcRenderer.invoke('stapler:endCapture'),
+  staplerSaveShot: (dataUrl: string): Promise<{ ok: true; path: string } | { ok: false; error: string }> => ipcRenderer.invoke('stapler:saveShot', dataUrl),
+  staplerTranscribe: (samples: Float32Array): Promise<{ ok: true; text: string } | { ok: false; error: string }> => ipcRenderer.invoke('stapler:transcribe', samples),
+  staplerSetInvisible: (on: boolean): Promise<boolean> => ipcRenderer.invoke('stapler:setInvisible', on),
+  staplerTypeText: (text: string): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('stapler:typeText', text),
+  staplerSaveMeeting: (m: { title: string; startedAt: number; segments: TranscriptSegment[] }): Promise<{ ok: true; id: string; path: string } | { ok: false; error: string }> => ipcRenderer.invoke('stapler:saveMeeting', m),
+  staplerListMeetings: (): Promise<MeetingSummary[]> => ipcRenderer.invoke('stapler:listMeetings'),
+  staplerUpdateTranscript: (id: string, text: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('stapler:updateTranscript', id, text),
+  onStaplerDictateToggle: (cb: () => void): (() => void) => {
+    const listener = () => cb();
+    ipcRenderer.on('stapler:dictateToggle', listener);
+    return () => ipcRenderer.removeListener('stapler:dictateToggle', listener);
+  },
   skillsLocal: (cwd?: string): Promise<LocalSkill[]> => ipcRenderer.invoke('skills:local', cwd),
   /** The browsable skills catalog (cached; `force` re-fetches). */
   skillsCatalog: (force?: boolean): Promise<{

@@ -69,6 +69,7 @@ import { inboxNudgeText } from '../shared/hiveNudge';
 import { resolveGodName } from '../shared/godIdentity';
 import { fetchHireManifest, prepareHireExport, readHireManifestFiles } from './hire';
 import { loadCapabilityList } from './capabilityList';
+import { initStapler, shutdownStapler } from './stapler';
 import {
   WORKER_HISTORY_LIMIT,
   appendIntegrationEvent,
@@ -5568,6 +5569,13 @@ function onSystemResume(reason: string): void {
 }
 
 app.whenReady().then(() => {
+  initStapler({
+    preloadPath: join(__dirname, '../preload/index.js'),
+    rendererUrl: !app.isPackaged ? process.env.ELECTRON_RENDERER_URL : undefined,
+    rendererFile: join(__dirname, '../renderer/index.html'),
+    hiveRoot: () => hive.root(),
+    localModel: () => (readConfig().staplerModel === 'larger' ? 'larger' : 'standard')
+  });
   // Realtime Michael mic-gate hygiene (rt-8 / Pam rt-10 nit): the voice session
   // opens the mic permission gate by persisting realtimeVoiceEnabled=true and
   // closes it on disconnect — but a hard crash/reload mid-session skips that
@@ -5650,6 +5658,7 @@ app.whenReady().then(() => {
 
 // before-quit covers Cmd-Q / dock-quit; the per-window close handler covers
 // the red close button. Both routes hit the same warning UX.
+app.on('will-quit', () => shutdownStapler());
 app.on('before-quit', (e) => {
   if (allowQuit) return;
   const count = ptyManager.list().length;
