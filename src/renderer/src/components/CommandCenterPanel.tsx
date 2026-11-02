@@ -1080,7 +1080,7 @@ function ArchivedSection() {
 
 // ─── Memory tab ──────────────────────────────────────────────────────────────
 
-function MemoryTab({ godId, who: controlledWho, onWho }: { godId: string; who?: string; onWho?: (id: string) => void }) {
+export function MemoryTab({ godId, who: controlledWho, onWho }: { godId: string; who?: string; onWho?: (id: string) => void }) {
   const { t } = useTranslation();
   const agents = useStore((s) => s.agents);
   // Selection is controllable from the graph tab; falls back to local state.

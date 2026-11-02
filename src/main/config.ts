@@ -223,6 +223,8 @@ export interface HarnessConfig {
   defaultAgentTokenCap?: number;
   /** Holds every agent's message queue, including agents spawned later. */
   floorDeliveryPaused?: boolean;
+  /** Which shell the app shows. Classic unless the user switches. */
+  workspaceView?: 'classic' | 'workspace';
   capabilityServers?: { [id: string]: { label: string; command: string; args: string[]; secretNames: string[] } };
   /** Enable semantic memory (MemPalace CLI). No-op if mempalace isn't installed. */
   semanticMemory: boolean;

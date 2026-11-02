@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useStore, selectedAgent } from '@/store/store';
 import { startMockLoop, stopMockLoop } from '@/store/mockEvents';
 import type { HarnessConfig } from '@/store/config';
@@ -30,6 +31,8 @@ import { acquireTerminal, notifyThemeChangeAll } from '@/components/terminalPool
 import { FullscreenTerminal } from '@/components/FullscreenTerminal';
 import { TaskDetailOverlay } from '@/components/TaskDetailOverlay';
 import { IdePanel } from '@/ide/IdePanel';
+import { WorkspaceShell } from '@/workspace/WorkspaceShell';
+import { normalizeWorkspaceView } from '@shared/workspace';
 import { useHoldOptionToTalk } from '@/freeflow/holdOption';
 import brandLogo from '@brand/logo.png?url';
 
@@ -44,6 +47,7 @@ export function App() {
   // Let terminals that are ALREADY open follow a language switch too.
   useArabicTerminalSync();
   const agent = useStore(selectedAgent);
+  const { t } = useTranslation();
   const agents = useStore(s => s.agents);
   const agentCount = agents.length;
   const bootingGodName = useResolvedGodName();
@@ -59,6 +63,7 @@ export function App() {
   const setIdeOpen = useStore(s => s.setIdeOpen);
 
   const [config, setConfig] = useState<HarnessConfig | null>(null);
+  const workspaceView = normalizeWorkspaceView(config?.workspaceView);
   // Whether the user has passed the launch-time hive picker this session. Starts
   // true (skip the picker) right after a hive SWITCH — changeHome relaunches and
   // leaves a one-shot localStorage flag so we don't bounce back onto the picker for
@@ -310,6 +315,15 @@ export function App() {
         }}>
           {config.autoMode ? 'auto mode on' : 'auto mode off'}
         </span>
+        <button
+          type="button"
+          className="cth-titlebar-nodrag"
+          onClick={() => void window.cth.updateConfig({ workspaceView: workspaceView === 'workspace' ? 'classic' : 'workspace' }).then(setConfig)}
+          aria-pressed={workspaceView === 'workspace'}
+          style={{ height: 28, padding: '0 10px', marginInlineEnd: 6, border: 'none', cursor: 'pointer', background: 'var(--cth-cream-200)', boxShadow: 'inset 0 0 0 1px var(--cth-ink-300)', color: 'var(--cth-ink-900)', fontFamily: 'var(--cth-font-ui)', fontSize: 12 }}
+        >
+          {workspaceView === 'workspace' ? t('workspace.toClassic') : t('workspace.toWorkspace')}
+        </button>
         {/* v0.3.4: theme + fullscreen live HERE (top right), not buried in the
             terminal header — and the theme darkens the whole app, terminals
             included (design/theme.ts + tokens.css dark block). */}
@@ -392,6 +406,7 @@ export function App() {
 
       </div>
 
+      {workspaceView === 'workspace' ? <WorkspaceShell /> : (<>
       <div style={{
         flex: 1, minHeight: 0,
         display: 'flex',
@@ -478,6 +493,7 @@ export function App() {
       </div>
 
       <AgentStrip config={config} />
+      </>)}
 
       {addAgentOpen && (
         <AddAgentModal
