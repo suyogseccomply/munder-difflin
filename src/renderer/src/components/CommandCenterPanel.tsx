@@ -13,6 +13,7 @@ import { TriggerHistoryTab } from './triggers/TriggerHistoryTab';
 import { WorkersTab } from './WorkersTab';
 import { SkillsTab } from './SkillsTab';
 import { SendToAgent } from './SendToAgent';
+import { MeaningResults, ShapedTextResults } from './MemoryResults';
 import { acquireTerminal, disposeTerminal, resetTerminal } from './terminalPool';
 import { terminalInstanceKey } from './terminalRecovery';
 import { Icon } from './Icon';
@@ -84,9 +85,9 @@ const TABS: { key: CCTab; labelKey: string; icon: Parameters<typeof Icon>[0]['na
  *  and renders the real terminal. The docked instance renders the "open in
  *  fullscreen" placeholder instead — two live xterms on one pty fight over its
  *  cols/rows and corrupt the display. */
-export function CommandCenterPanel({ agent, fullscreen = false }: { agent: Agent; fullscreen?: boolean }) {
+export function CommandCenterPanel({ agent, fullscreen = false, only }: { agent: Agent; fullscreen?: boolean; /** Shows one tab with no header or tab strip, for the workspace. */ only?: CCTab }) {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<CCTab>('terminal');
+  const [tab, setTab] = useState<CCTab>(only ?? 'terminal');
   // The trigger-history ledger has nothing to say until an outside party can
   // reach us, so its tab appears only once an org key or a webhook exists. This
   // is the first config-gated tab in the panel: TABS stays the canonical order
@@ -159,6 +160,7 @@ export function CommandCenterPanel({ agent, fullscreen = false }: { agent: Agent
       noPadding
       style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: 0, overflow: 'hidden' }}
     >
+      {!only && (<>
       {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8,
@@ -294,6 +296,7 @@ export function CommandCenterPanel({ agent, fullscreen = false }: { agent: Agent
         ))}
       </div>
 
+      </>)}
       {/* Body */}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {tab === 'terminal' && (
@@ -348,7 +351,10 @@ export function CommandCenterPanel({ agent, fullscreen = false }: { agent: Agent
 
 // ─── Floor tab — roster, model, dispatch, dirs, assistant ────────────────────
 
-function FloorTab({ seed }: { seed: { text: string; seq: number } }) {
+export type FloorSection = 'dispatch' | 'agents' | 'archived' | 'directories' | 'issues';
+
+export function FloorTab({ seed, sections }: { seed: { text: string; seq: number }; /** Unset shows them all. */ sections?: readonly FloorSection[] }) {
+  const show = (x: FloorSection): boolean => !sections || sections.includes(x);
   const { t } = useTranslation();
   const rtl = useRtl();
   const agents = useStore((s) => s.agents);
@@ -650,6 +656,7 @@ function FloorTab({ seed }: { seed: { text: string; seq: number } }) {
 
   return (
     <Scroll>
+      {show('dispatch') && (
       <Section title={t('commandCenter.dispatchViaMichael', { godName: godName.toUpperCase() })}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
           <span style={{ fontFamily: 'var(--cth-font-display)', fontSize: 8, color: 'var(--cth-ink-500)', flexShrink: 0 }}>
@@ -677,7 +684,9 @@ function FloorTab({ seed }: { seed: { text: string; seq: number } }) {
           {dispatchMsg && <span style={{ fontSize: 12, color: 'var(--cth-ink-500)' }}>{dispatchMsg}</span>}
         </div>
       </Section>
+      )}
 
+      {show('agents') && (
       <Section title={t('commandCenter.agents')}>
         {agents.map((a) => {
           const agentProvider = inferAgentProvider(a.command, a.provider);
@@ -957,10 +966,12 @@ function FloorTab({ seed }: { seed: { text: string; seq: number } }) {
           </Muted>
         </div>
       </Section>
+      )}
 
-      <ArchivedSection />
+      {show('archived') && <ArchivedSection />}
 
 
+      {show('directories') && (
       <Section title={t('commandCenter.directories')}>
         {repos.length === 0 && <Muted>{t('commandCenter.noRepos')}</Muted>}
         {repos.map((r) => (
@@ -974,7 +985,9 @@ function FloorTab({ seed }: { seed: { text: string; seq: number } }) {
           </div>
         ))}
       </Section>
+      )}
 
+      {show('issues') && (
       <Section title={t('commandCenter.issues')}>
         {repos.length === 0 && <Muted>{t('commandCenter.noRepos')}</Muted>}
         {repos.length > 0 && (
@@ -1027,6 +1040,7 @@ function FloorTab({ seed }: { seed: { text: string; seq: number } }) {
           </>
         )}
       </Section>
+      )}
     </Scroll>
   );
 }
@@ -1135,16 +1149,7 @@ export function MemoryTab({ godId, who: controlledWho, onWho }: { godId: string;
             {textBusy ? '…' : t('common.search')}
           </PixelButton>
         </div>
-        {textResults.length > 0 && (
-          <div style={{ marginTop: 6 }}>
-            {textResults.map((r, i) => (
-              <div key={i} style={{ marginBottom: 4 }}>
-                <div style={{ fontFamily: 'var(--cth-font-mono)', fontSize: 11, color: 'var(--cth-ink-500)' }}>{r.source}</div>
-                <Pre>{r.excerpt}</Pre>
-              </div>
-            ))}
-          </div>
-        )}
+        {textResults.length > 0 && <ShapedTextResults hits={textResults} />}
         {textResults.length > 0 && <SendToAgent text={textResults.map((r) => `[${r.source}] ${r.excerpt}`).join('\n')} query={textQuery} />}
         {textSearched && textResults.length === 0 && <Muted>{t('commandCenter.nothingMatched')}</Muted>}
       </Section>
@@ -1162,7 +1167,7 @@ export function MemoryTab({ godId, who: controlledWho, onWho }: { godId: string;
             {busy ? '…' : t('common.search')}
           </PixelButton>
         </div>
-        {searchOut && <Pre>{searchOut}</Pre>}
+        {searchOut && <MeaningResults output={searchOut} />}
         {searchOut && <SendToAgent text={searchOut} query={query} />}
       </Section>
 
@@ -1260,7 +1265,7 @@ function TokenLimitEditor({ value, onSet }: { value?: number; onSet: (tokens: nu
 
 interface LogEntry { ts?: number; kind?: string; [k: string]: unknown }
 
-function ActivityTab() {
+export function ActivityTab() {
   const { t } = useTranslation();
   const [log, setLog] = useState<LogEntry[]>([]);
   const [board, setBoard] = useState('');

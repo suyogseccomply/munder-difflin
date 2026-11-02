@@ -228,6 +228,9 @@
       "body": "这将永久抹除 {{godName}} 的所有记忆和整个 hive，且无法撤销。任何运行中的会话都会被终止，应用将重启进入新手引导。你确定吗？"
     },
     "general": {
+      "defaultView": "默认视图",
+      "defaultViewLast": "我上次使用的视图",
+      "ticketPrefix": "工单键前缀",
       "homeFolder": "主文件夹",
       "environment": "环境",
       "keepAwake": "智能体运行时保持 Mac 唤醒",
@@ -385,6 +388,7 @@
     "unsavedWarning": "你有未保存的设置。仍要关闭并放弃这些更改吗？"
   },
   "commandCenter": {
+    "sendPrompt": "要他们怎么处理这些结果？",
     "sendTo": "发送给",
     "sendPick": "将结果发送给…",
     "sent": "已发送给 {{name}}。",
@@ -1517,6 +1521,16 @@
     "keyFailed": "无法保存此密钥。"
   },
   "workspace": {
+    "orch_terminal": "终端",
+    "orch_messages": "消息",
+    "orch_routing": "路由",
+    "orch_budget": "预算与断路器",
+    "orch_board": "看板",
+    "orch_configuration": "配置",
+    "breakerSettings": "断路器设置",
+    "inbox_team": "团队",
+    "filterAgent": "显示谁的消息",
+    "everyone": "所有人",
     "cards": "卡片",
     "dateFilter": "创建时间",
     "range_all": "任何时间",
@@ -1667,5 +1681,12 @@
     "slackAnswerBy": "Slack 由谁回复",
     "webhookAnswerBy": "Webhook 由谁回复",
     "orchestrator": "协调者"
+  },
+  "memoryResults": {
+    "cards": "卡片",
+    "list": "列表",
+    "tickets": "工单",
+    "agents": "智能体",
+    "notes": "笔记"
   }
 }

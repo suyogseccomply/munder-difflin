@@ -31,6 +31,11 @@ export function AgentDetailPanel({ agent }: AgentDetailPanelProps) {
   const [openTerminalState, setOpenTerminalState] = useState<'idle' | 'opening' | 'ok' | 'error'>('idle');
   const [openTerminalError, setOpenTerminalError] = useState<string | undefined>();
   const [editOpen, setEditOpen] = useState(false);
+  useEffect(() => {
+    const onDetails = () => setEditOpen((v) => !v);
+    window.addEventListener('cth:agent-details', onDetails);
+    return () => window.removeEventListener('cth:agent-details', onDetails);
+  }, []);
 
   /**
    * THE HEADER STRIP HAS TO GIVE SOMETHING UP WHEN THE SIDEBAR IS DRAGGED IN.

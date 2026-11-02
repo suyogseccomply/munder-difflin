@@ -238,6 +238,8 @@ export interface HarnessConfig {
   webhookAnswerBy?: string;
   /** Prefix for ticket keys, as in V53-299. */
   ticketPrefix?: string;
+  /** Which view the app opens in. Unset keeps whichever was last used. */
+  defaultView?: 'classic' | 'workspace';
   capabilityServers?: { [id: string]: { label: string; command: string; args: string[]; secretNames: string[] } };
   /** Enable semantic memory (MemPalace CLI). No-op if mempalace isn't installed. */
   semanticMemory: boolean;

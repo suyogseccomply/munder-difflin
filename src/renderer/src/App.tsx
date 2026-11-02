@@ -97,7 +97,21 @@ export function App() {
       setSettingsOpen(true);
     };
     window.addEventListener('cth:open-settings', onOpenSettings);
-    return () => window.removeEventListener('cth:open-settings', onOpenSettings);
+    const onShortcut = (e: KeyboardEvent): void => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      if (e.key === ',') { e.preventDefault(); e.stopPropagation(); window.dispatchEvent(new CustomEvent('cth:open-settings')); }
+      if (e.key === '.') { e.preventDefault(); e.stopPropagation(); window.dispatchEvent(new CustomEvent('cth:agent-details')); }
+      // Command only. Ctrl+I is Tab to a terminal, and agents' prompts rely on it.
+      if (e.key === 'i' && e.metaKey) {
+        const id = useStore.getState().selectedId;
+        if (id) { e.preventDefault(); e.stopPropagation(); useStore.getState().setIdeOpen(true, id); }
+      }
+    };
+    window.addEventListener('keydown', onShortcut, true);
+    return () => {
+      window.removeEventListener('cth:open-settings', onOpenSettings);
+      window.removeEventListener('keydown', onShortcut, true);
+    };
   }, []);
 
   // Initial config load

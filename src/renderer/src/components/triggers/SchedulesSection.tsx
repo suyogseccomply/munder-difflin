@@ -286,7 +286,14 @@ function MissionRow({ mission, targetName, agents, onPatch, onDelete }: {
       )}
 
       {open && (
-        <div style={{ marginTop: 4 }}>
+        <div
+          style={{ marginTop: 4 }}
+          // Saves when focus leaves the schedule, so nothing is lost by moving on. The
+          // button stays for anyone who wants to be sure.
+          onBlur={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null) && dirty && label.trim() && whenIsUsable) save();
+          }}
+        >
           <Field label={t('schedulesSection.label')}>
             <input value={label} onChange={(e) => setLabel(e.target.value)} style={inputStyle} />
           </Field>

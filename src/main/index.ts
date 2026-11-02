@@ -1372,7 +1372,8 @@ ipcMain.handle('limits:usage', () => {
   if (root) void costTotals.refresh(join(root, 'cost-ledger.jsonl'));
   const agents: Record<string, Partial<Record<LimitPeriod, number>>> = {};
   for (const id of Object.keys(hive.registry().agents)) agents[id] = totals(id);
-  return { ready: costTotals.ready, office: totals(null), agents };
+  // With no ledger yet there is nothing to read, so it isn't "still reading".
+  return { ready: costTotals.ready || !root || !existsSync(join(root, 'cost-ledger.jsonl')), office: totals(null), agents };
 });
 
 // ─── Clear on a work switch ──────────────────────────────────────────────────
@@ -5808,6 +5809,8 @@ function onSystemResume(reason: string): void {
 }
 
 app.whenReady().then(() => {
+  const openIn = readConfig().defaultView;
+  if (openIn && readConfig().workspaceView !== openIn) writeConfig({ workspaceView: openIn });
   initTeams({
     relayUrl: () => readConfig().teamsRelayUrl,
     setRelayUrl: (teamsRelayUrl) => { writeConfig({ teamsRelayUrl }); },

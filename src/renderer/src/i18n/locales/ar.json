@@ -228,6 +228,9 @@
       "body": "هذا يمحو نهائيًا كل ذكريات {{godName}} والخلية بأكملها، ولا يمكن التراجع عنه. ستُنهى أي جلسات عاملة وسيُعاد تشغيل التطبيق إلى الإعداد الأولي. هل أنت متأكّد؟"
     },
     "general": {
+      "defaultView": "العرض الافتراضي",
+      "defaultViewLast": "آخر عرض استخدمته",
+      "ticketPrefix": "بادئة مفتاح التذكرة",
       "homeFolder": "مجلد المنزل",
       "environment": "البيئة",
       "keepAwake": "أبقِ جهاز Mac مستيقظًا أثناء عمل الوكلاء",
@@ -385,6 +388,7 @@
     "unsavedWarning": "لديك إعدادات غير محفوظة. أأغلق على أي حال وأفقدها؟"
   },
   "commandCenter": {
+    "sendPrompt": "ماذا عليهم أن يفعلوا بهذه؟",
     "sendTo": "إرسال إلى",
     "sendPick": "إرسال النتائج إلى…",
     "sent": "تم الإرسال إلى {{name}}.",
@@ -1517,6 +1521,16 @@
     "keyFailed": "تعذر حفظ هذا المفتاح."
   },
   "workspace": {
+    "orch_terminal": "الطرفية",
+    "orch_messages": "الرسائل",
+    "orch_routing": "التوجيه",
+    "orch_budget": "الميزانية والقاطع",
+    "orch_board": "اللوحة",
+    "orch_configuration": "الإعداد",
+    "breakerSettings": "إعدادات القاطع",
+    "inbox_team": "الفريق",
+    "filterAgent": "عرض رسائل",
+    "everyone": "الجميع",
     "cards": "البطاقات",
     "dateFilter": "تاريخ الإنشاء",
     "range_all": "أي وقت",
@@ -1667,5 +1681,12 @@
     "slackAnswerBy": "يجيب على Slack",
     "webhookAnswerBy": "يجيب على الخطافات",
     "orchestrator": "المنسق"
+  },
+  "memoryResults": {
+    "cards": "البطاقات",
+    "list": "القائمة",
+    "tickets": "التذاكر",
+    "agents": "الوكلاء",
+    "notes": "الملاحظات"
   }
 }

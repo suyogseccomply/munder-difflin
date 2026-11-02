@@ -10,7 +10,9 @@ import { AskMeTab } from '@/components/AskMeTab';
 import { TriggersTab } from '@/components/triggers/TriggersTab';
 import { TriggerHistoryTab } from '@/components/triggers/TriggerHistoryTab';
 import { MemoryGraphPanel } from '@/components/MemoryGraphPanel';
-import { MemoryTab } from '@/components/CommandCenterPanel';
+import { ActivityTab, CommandCenterPanel, FloorTab, MemoryTab } from '@/components/CommandCenterPanel';
+import { SkillsTab } from '@/components/SkillsTab';
+import { TokenLimitsSettings } from '@/components/TokenLimitsSettings';
 import { CapabilitiesPanel } from '@/components/CapabilitiesPanel';
 import { WorkersTab } from '@/components/WorkersTab';
 import { useStore, type Agent } from '@/store/store';
@@ -143,7 +145,7 @@ export function WorkspaceShell() {
         {screen === 'orchestrator' && (god
           ? <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
               <StatTiles agents={agents} tasks={tasks} waiting={waiting} />
-              <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}><AgentDetailPanel agent={god} /></div>
+              <OrchestratorTabs god={god} />
             </div>
           : <div style={scroll}><span style={muted}>{t('workspace.noOrchestrator')}</span></div>)}
         {screen === 'agents' && (roomAgent
@@ -157,6 +159,41 @@ export function WorkspaceShell() {
         {screen === 'temps' && <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}><WorkersTab /></div>}
         {screen === 'team' && <TeamScreen />}
       </main>
+    </div>
+  );
+}
+
+const ORCHESTRATOR_TABS = ['terminal', 'messages', 'routing', 'budget', 'board', 'configuration'] as const;
+type OrchestratorTab = (typeof ORCHESTRATOR_TABS)[number];
+const NO_SEED = { text: '', seq: 0 };
+
+/** Everything the orchestrator decides, one tab at a time. Each is a piece of Command
+ *  Center or Settings, so the two views always show the same state. */
+function OrchestratorTabs({ god }: { god: Agent }) {
+  const { t } = useTranslation();
+  const [tab, setTab] = useState<OrchestratorTab>('terminal');
+  const fill: CSSProperties = { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' };
+  return (
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <div role="tablist" style={{ display: 'flex', gap: 4, padding: '0 6px 6px', flexShrink: 0, flexWrap: 'wrap' }}>
+        {ORCHESTRATOR_TABS.map((key) => (
+          <PixelButton key={key} size="sm" variant={tab === key ? 'primary' : 'secondary'} onClick={() => setTab(key)}>{t(`workspace.orch_${key}`)}</PixelButton>
+        ))}
+      </div>
+      {tab === 'terminal' && <div style={fill}><CommandCenterPanel agent={god} only="terminal" /></div>}
+      {tab === 'messages' && <div style={fill}><ThreadsPanel agentId={god.id} /></div>}
+      {tab === 'routing' && <div style={fill}><FloorTab seed={NO_SEED} sections={['dispatch']} /><ActivityTab /></div>}
+      {tab === 'budget' && (
+        <div style={fill}>
+          <div style={{ padding: 12 }}><TokenLimitsSettings /></div>
+          <div style={{ padding: '0 12px 8px', flexShrink: 0 }}>
+            <PixelButton size="sm" variant="secondary" onClick={() => window.dispatchEvent(new CustomEvent('cth:open-settings', { detail: { section: 'Autonomy & Budgets' } }))}>{t('workspace.breakerSettings')}</PixelButton>
+          </div>
+          <FloorTab seed={NO_SEED} sections={['agents']} />
+        </div>
+      )}
+      {tab === 'board' && <div style={fill}><TasksKanban /></div>}
+      {tab === 'configuration' && <div style={fill}><FloorTab seed={NO_SEED} sections={['directories', 'issues', 'archived']} /><SkillsTab agentCwd={god.cwd} /></div>}
     </div>
   );
 }
@@ -378,7 +415,9 @@ function TasksScreen({ tasks, agents }: { tasks: HiveTask[]; agents: Agent[] }) 
 
 function InboxScreen() {
   const { t, i18n } = useTranslation();
-  const [tab, setTab] = useState<'ask' | 'floor' | 'outside'>('ask');
+  const [tab, setTab] = useState<'ask' | 'floor' | 'outside' | 'team'>('ask');
+  const [who, setWho] = useState('');
+  const agents = useStore((s) => s.agents);
   const [messages, setMessages] = useState<Awaited<ReturnType<typeof window.cth.hiveMessages>>>([]);
   const [query, setQuery] = useState('');
   useEffect(() => {
@@ -388,16 +427,20 @@ function InboxScreen() {
     const timer = setInterval(() => void read(), POLL_MS);
     return () => clearInterval(timer);
   }, [tab]);
-  const shown = useMemo(() => floorMessages(messages, query), [messages, query]);
-  const button = (key: 'ask' | 'floor' | 'outside') => (
+  const shown = useMemo(
+    () => floorMessages(messages, query).filter((m) => !who || m.from === who || m.to === who),
+    [messages, query, who]
+  );
+  const button = (key: 'ask' | 'floor' | 'outside' | 'team') => (
     <PixelButton size="sm" variant={tab === key ? 'primary' : 'secondary'} onClick={() => setTab(key)}>{t(`workspace.inbox_${key}`)}</PixelButton>
   );
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', gap: 6, padding: 8, flexShrink: 0 }}>{button('ask')}{button('floor')}{button('outside')}</div>
+      <div style={{ display: 'flex', gap: 6, padding: 8, flexShrink: 0 }}>{button('ask')}{button('floor')}{button('outside')}{button('team')}</div>
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {tab === 'ask' && <AskMeTab />}
         {tab === 'outside' && <TriggerHistoryTab />}
+        {tab === 'team' && <TeamScreen />}
         {tab === 'floor' && (
           <div style={scroll}>
             <input
@@ -407,6 +450,10 @@ function InboxScreen() {
               aria-label={t('workspace.searchFloor')}
               style={{ width: '100%', boxSizing: 'border-box', padding: '6px 8px', border: 'none', outline: 'none', background: 'var(--cth-paper-100)', boxShadow: 'inset 0 0 0 1px var(--cth-ink-100)', fontFamily: 'var(--cth-font-ui)', fontSize: 13, color: 'var(--cth-ink-900)', marginBottom: 8 }}
             />
+            <select value={who} onChange={(e) => setWho(e.target.value)} aria-label={t('workspace.filterAgent')} style={{ fontFamily: 'var(--cth-font-ui)', fontSize: 12, color: 'var(--cth-ink-900)', background: 'var(--cth-paper-100)', border: 'none', boxShadow: 'inset 0 0 0 1px var(--cth-ink-100)', padding: '3px 4px', marginBottom: 8 }}>
+              <option value="">{t('workspace.everyone')}</option>
+              {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
             {shown.length === 0 && <span style={muted}>{t('workspace.noMessages')}</span>}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {shown.map((m) => (

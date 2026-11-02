@@ -228,6 +228,9 @@
       "body": "This permanently erases all of {{godName}}'s memories and the entire hive, and cannot be undone. Any running sessions will be terminated and the app will relaunch into onboarding. Are you sure?"
     },
     "general": {
+      "defaultView": "Default view",
+      "defaultViewLast": "Whichever I used last",
+      "ticketPrefix": "Ticket key prefix",
       "homeFolder": "Home folder",
       "environment": "Environment",
       "keepAwake": "Keep Mac awake while agents run",
@@ -385,6 +388,7 @@
     "unsavedWarning": "You have unsaved settings. Close anyway and lose them?"
   },
   "commandCenter": {
+    "sendPrompt": "What should they do with these?",
     "sendTo": "Send to",
     "sendPick": "Send results to…",
     "sent": "Sent to {{name}}.",
@@ -1517,6 +1521,16 @@
     "keyFailed": "Could not save this key."
   },
   "workspace": {
+    "orch_terminal": "Terminal",
+    "orch_messages": "Messages",
+    "orch_routing": "Routing",
+    "orch_budget": "Budget and breaker",
+    "orch_board": "Board",
+    "orch_configuration": "Configuration",
+    "breakerSettings": "breaker settings",
+    "inbox_team": "Team",
+    "filterAgent": "Show messages for",
+    "everyone": "Everyone",
     "cards": "Cards",
     "dateFilter": "Created",
     "range_all": "Any time",
@@ -1667,5 +1681,12 @@
     "slackAnswerBy": "Slack is answered by",
     "webhookAnswerBy": "Webhooks are answered by",
     "orchestrator": "The orchestrator"
+  },
+  "memoryResults": {
+    "cards": "Cards",
+    "list": "List",
+    "tickets": "Tickets",
+    "agents": "Agents",
+    "notes": "Notes"
   }
 }

@@ -21,6 +21,7 @@ import { OfficeThemePicker } from './OfficeThemePicker';
 import { McpDefaultsSettings } from './McpDefaultsSettings';
 import { CapabilitiesPanel } from './CapabilitiesPanel';
 import { TokenLimitsSettings } from './TokenLimitsSettings';
+import { GeneralExtrasSettings } from './GeneralExtrasSettings';
 import { AnswerBySettings, TempsPerAgentSetting } from './TempRoutingSettings';
 import { IntegrationsRegistry } from './IntegrationsRegistry';
 import { AiEnginesSettings } from './AiEnginesSettings';
@@ -1024,6 +1025,7 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                           {t('settings.general.environment')}
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                          <GeneralExtrasSettings config={config} />
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                               <span style={{ fontSize: 13, lineHeight: '20px', color: 'var(--cth-ink-900)' }}>{t('settings.general.keepAwake')}</span>

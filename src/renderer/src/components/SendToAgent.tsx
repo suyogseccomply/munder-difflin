@@ -1,18 +1,20 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '@/store/store';
+import { resultsMessage } from '@shared/memoryResults';
 
 /** Hands search results to an agent through its normal inbox. */
 export function SendToAgent({ text, query }: { text: string; query: string }) {
   const { t } = useTranslation();
   const agents = useStore((s) => s.agents);
   const [note, setNote] = useState('');
+  const [prompt, setPrompt] = useState('');
 
   const send = async (id: string) => {
     const agent = agents.find((a) => a.id === id);
     if (!agent) return;
     const res = await window.cth.hiveSend(
-      { to: agent.isGod ? 'god' : id, act: 'inform', subject: t('commandCenter.sendSubject', { query: query.slice(0, 80) }), body: text },
+      { to: agent.isGod ? 'god' : id, act: 'inform', subject: t('commandCenter.sendSubject', { query: query.slice(0, 80) }), body: resultsMessage(prompt, text) },
       'human'
     );
     setNote(res.ok ? t('commandCenter.sent', { name: agent.name }) : (res.error ?? ''));
@@ -20,6 +22,13 @@ export function SendToAgent({ text, query }: { text: string; query: string }) {
 
   return (
     <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
+      <input
+        value={prompt}
+        onChange={(e) => setPrompt(e.target.value)}
+        placeholder={t('commandCenter.sendPrompt')}
+        aria-label={t('commandCenter.sendPrompt')}
+        style={{ flex: 1, minWidth: 160, padding: '3px 6px', outline: 'none', fontFamily: 'var(--cth-font-ui)', fontSize: 12, color: 'var(--cth-ink-900)', background: 'var(--cth-paper-100)', border: 'none', boxShadow: 'inset 0 0 0 1px var(--cth-ink-100)' }}
+      />
       <select
         value=""
         onChange={(e) => { if (e.target.value) void send(e.target.value); }}
