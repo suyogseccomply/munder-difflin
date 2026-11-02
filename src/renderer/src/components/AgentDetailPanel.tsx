@@ -19,6 +19,7 @@ import { Icon } from './Icon';
 import { AgentNameEditor } from './AgentNameEditor';
 import { useStore, type Agent } from '@/store/store';
 import { usePtyParser } from '@/hooks/usePtyParser';
+import { inferAgentProvider } from '@/store/config';
 
 export interface AgentDetailPanelProps {
   agent: Agent;
@@ -231,7 +232,7 @@ export function AgentDetailPanel({ agent }: AgentDetailPanelProps) {
       )}
 
       {/* #7C — operator control (pause / halt / steer) for live agents */}
-      {isReal && <AgentControlStrip agentId={agent.id} />}
+      {isReal && <AgentControlStrip agentId={agent.id} provider={inferAgentProvider(agent.command, agent.provider)} />}
 
       {/* Tabs */}
       <SidebarTabs current={sidebarTab} accent={agent.accent} onChange={setSidebarTab} />

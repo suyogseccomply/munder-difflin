@@ -14,7 +14,7 @@ import {
   remoteControlCommandForProvider,
   terminalReadyToReceive
 } from '../../../shared/providerAutomation';
-import { DEFAULT_CONTEXT_TRIGGER, type ContextRule } from '../../../shared/triggers';
+import { DEFAULT_CONTEXT_TRIGGER, compactOnFillDue, type ContextRule } from '../../../shared/triggers';
 import type { AgentProvider } from '../../../shared/agentProvider';
 import { bridgeOf, providerPreset } from '../../../shared/agentProvider';
 import { isDurableRole, preferredAgentRole, roleForHiveSpawn } from '../../../shared/agentRole';
@@ -302,6 +302,8 @@ export function useHive(config: HarnessConfig | null): void {
   // in the context-trigger effect: an idle agent's token count is frozen, so
   // without this the pressure gate re-fires on the identical number every cycle.
   const lastCompactUsed = useRef<Record<string, number>>({});
+
+  const lastFillCompactAt = useRef<Record<string, number>>({});
   // Per-agent timestamp of the last queued-message we submitted. Guards against
   // re-sending the next message before the agent's hooks have flipped it to
   // 'working' (there's a short window where it still reads 'idle' right after we
@@ -1091,11 +1093,11 @@ export function useHive(config: HarnessConfig | null): void {
   useEffect(() => {
     if (!config?.onboardingComplete) return;
 
-       const fire = (action: 'compact' | 'clear', rule: ContextRule): void => {
+       const fire = (action: 'compact' | 'clear', rule: ContextRule, only?: ReadonlySet<string>): void => {
       const { agents, messageQueues, enqueueMessage } = useStore.getState();
       const now = Date.now();
       for (const a of agents) {
-        if (!a.ptyId) continue;
+        if (!a.ptyId || (only && !only.has(a.id))) continue;
         // Gate #109-2: don't enqueue a context command for an agent that cannot
         // currently receive one (e.g. god 'blocked' on a human prompt). Enqueuing
         // anyway left a stuck /compact at the head of the queue that dedupe then
@@ -1163,7 +1165,20 @@ export function useHive(config: HarnessConfig | null): void {
       () => fire('compact', DEFAULT_CONTEXT_TRIGGER.compact)
     );
 
-    return () => { off?.(); offLegacy?.(); };
+    // Between timer runs: compact a metered agent as soon as it crosses its bar.
+    const fillTimer = setInterval(() => {
+      void window.cth.getContextTrigger().then((cfg) => {
+        const now = Date.now();
+        const due = useStore.getState().agents.filter((a) => compactOnFillDue(
+          cfg.compact, contextFillPct(a), lastFillCompactAt.current[a.id], now, (a.contextLimit ?? 0) >= LARGE_CONTEXT_WINDOW
+        ));
+        if (due.length === 0) return;
+        for (const a of due) lastFillCompactAt.current[a.id] = now;
+        fire('compact', cfg.compact, new Set(due.map((a) => a.id)));
+      }).catch(() => { /* main not ready */ });
+    }, 60_000);
+
+    return () => { off?.(); offLegacy?.(); clearInterval(fillTimer); };
   }, [config?.onboardingComplete]);
 
   // 7) Auto-revive wedged PTYs after the Mac sleeps/locks. Kevin's main-process

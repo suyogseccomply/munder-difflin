@@ -81,6 +81,8 @@ export function classifyInboundKind(text: string): InboundKind {
  */
 export interface ContextRule {
   enabled: boolean;
+  /** Also run as soon as an agent's reading crosses the bar, not only on the timer. */
+  onFill?: boolean;
   /** Minimum wall-clock gap between runs. */
   everyMs: number;
   /** Percent (0-100) of the context window that must be used before firing. */
@@ -133,6 +135,7 @@ export const DEFAULT_COMPACTION_FOCUS =
 export const DEFAULT_CONTEXT_TRIGGER: ContextTriggerConfig = {
   compact: {
     enabled: true,
+    onFill: true,
     everyMs: 7_200_000, // 2h — was 1h
     minContextPct: 60, // was a documented-but-unenforced 30
     minContextPctLargeWindow: 40, // was a documented-but-unenforced 20
@@ -146,6 +149,19 @@ export const DEFAULT_CONTEXT_TRIGGER: ContextTriggerConfig = {
     message: ''
   }
 };
+
+/** Shortest gap between fill-triggered runs on one agent, so one that stays over
+ *  the bar after compacting isn't interrupted again every check. */
+const ON_FILL_MIN_GAP_MS = 600_000;
+
+/** Whether a metered agent should compact now. An unmetered agent has no reading to
+ *  act on, so it stays on the timer rather than firing at every check. */
+export function compactOnFillDue(rule: ContextRule, pct: number | null, lastAt: number | undefined, now: number, large = false): boolean {
+  if (!rule.enabled || !rule.onFill || pct === null) return false;
+  const bar = large ? rule.minContextPctLargeWindow : rule.minContextPct;
+  if (!(bar > 0) || pct < bar) return false;
+  return lastAt === undefined || now - lastAt >= ON_FILL_MIN_GAP_MS;
+}
 
 /* ──────────────────────────── webhook triggers ───────────────────────────── */
 

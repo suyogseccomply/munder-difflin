@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'ele
 import type { AgentProvider } from '../shared/agentProvider';
 import type { HireManifest } from '../shared/hire';
 import type { CapabilityList } from '../shared/capabilities';
+import type { IntegrationEvent, WorkerHistoryRow } from '../main/jsonLedger';
 export type { HireManifest } from '../shared/hire';
 
 /** Mirrors CapabilityLoadResult in src/main/capabilityList.ts. */
@@ -289,6 +290,10 @@ export interface HarnessConfig {
    *  mcpDefaults for that agent; no grant means the floor default applies. */
   agentMcpGrants?: { [agentId: string]: { [serverId: string]: boolean } };
   /** Servers the user added from the capabilities list, keyed by entry id. */
+  /** Token cap for agents with none of their own. Temps and the orchestrator excepted. */
+  defaultAgentTokenCap?: number;
+  /** Holds every agent's message queue, including agents spawned later. */
+  floorDeliveryPaused?: boolean;
   capabilityServers?: { [id: string]: { label: string; command: string; args: string[]; secretNames: string[] } };
   semanticMemory: boolean;
   embeddingModel: 'minilm' | 'embeddinggemma';
@@ -824,6 +829,11 @@ const api = {
   capabilitiesKeyStatus: (names: string[]): Promise<Record<string, boolean>> => ipcRenderer.invoke('capabilities:keyStatus', names),
   capabilitiesSetKey: (name: string, value: string): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('capabilities:setKey', name, value),
+  controlFloorDelivery: (paused: boolean): Promise<boolean> => ipcRenderer.invoke('control:floorDelivery', paused),
+  workersHistory: (): Promise<WorkerHistoryRow[]> => ipcRenderer.invoke('workers:history'),
+  workersStart: (req: { objective: string; name?: string; cwd?: string }): Promise<{ ok: true } | { ok: false; error: string }> =>
+    ipcRenderer.invoke('workers:start', req),
+  integrationsLog: (id: string): Promise<IntegrationEvent[]> => ipcRenderer.invoke('integrations:log', id),
   skillsLocal: (cwd?: string): Promise<LocalSkill[]> => ipcRenderer.invoke('skills:local', cwd),
   /** The browsable skills catalog (cached; `force` re-fetches). */
   skillsCatalog: (force?: boolean): Promise<{

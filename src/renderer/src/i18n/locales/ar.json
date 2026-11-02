@@ -60,6 +60,8 @@
     "typing": "مسودّتك"
   },
   "agentControl": {
+    "cancelStop": "إلغاء الإيقاف",
+    "unsupported": "هذا المحرك لا يقرأ ردود التحكم، لذا لا تصل إليه هذه الأزرار. استخدم طرفيته.",
     "deliveryPaused": "الرسائل المصفوفة محتجزة (الأرضية كلها)",
     "halting": "سيتوقّف بعد هذه الخطوة…",
     "steersQueued": "{{count}} ملاحظة في الانتظار",
@@ -261,6 +263,9 @@
       "blankUnlimited": "فارغ = بلا حدّ"
     },
     "autonomy": {
+        "usdCap": "حد إنفاق الطابق ($)",
+        "defaultAgentCap": "حد الرموز الافتراضي للوكيل",
+        "defaultAgentCapHint": "للوكلاء الذين ليس لهم حد خاص. يُستثنى المؤقتون والمنسق.",
       "autonomy": "الاستقلالية",
       "autoOn": "مستقلّ — يتصرّف الوكلاء دون سؤال",
       "autoOff": "يسأل أولًا — يتوقّف الوكلاء لطلب الموافقة على الأدوات",
@@ -379,6 +384,10 @@
     "unsavedWarning": "لديك إعدادات غير محفوظة. أأغلق على أي حال وأفقدها؟"
   },
   "commandCenter": {
+    "sendTo": "إرسال إلى",
+    "sendPick": "إرسال النتائج إلى…",
+    "sent": "تم الإرسال إلى {{name}}.",
+    "sendSubject": "نتائج البحث: {{query}}",
     "title": "مركز القيادة",
     "runsTheFloor": "{{name}} يُدير الأرضية",
     "deliveryPaused": "موقوف",
@@ -1173,6 +1182,19 @@
     "catalogUnreachable": "تعذّر الوصول إلى الفهرس"
   },
   "workersTab": {
+    "hireTitle": "توظيف مؤقت",
+    "hirePlaceholder": "صف المهمة الواحدة. ستبدأ الآن وتستهلك الرموز.",
+    "hire": "توظيف",
+    "history": "المؤقتون المنتهون",
+    "noHistory": "لم ينتهِ أي مؤقت بعد.",
+    "end_done": "انتهى",
+    "end_token_cap": "بلغ حد الرموز",
+    "end_idle": "توقف بسبب الخمول",
+    "end_stopped": "أوقفته أنت",
+    "end_crashed": "انتهى بشكل غير متوقع",
+    "ranFor": "عمل {{age}}",
+    "endedAgo": "انتهى قبل {{age}}",
+    "keptAt": "شجرة عمل محفوظة: {{path}}",
     "stopping": "يتوقّف",
     "working": "يعمل",
     "liveWorkers": "العمّال النشطون",
@@ -1214,6 +1236,12 @@
     "legendInformTopic": "إخبار/موضوع"
   },
   "integrations": {
+    "logEmpty": "لا توجد طلبات بعد.",
+    "logShow": "عرض النشاط ({{count}})",
+    "logHide": "إخفاء النشاط",
+    "logLast": "آخر طلب: {{status}}، {{when}}",
+    "logFailed": "لا استجابة",
+    "logTest": "اختبار",
     "errLabel": "أعطِه تسمية.",
     "errId": "تعذّر اشتقاق معرّف صالح من التسمية.",
     "errBaseUrl": "عنوان URL الأساسي مطلوب.",

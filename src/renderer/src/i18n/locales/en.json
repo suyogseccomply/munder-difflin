@@ -60,6 +60,8 @@
     "typing": "your draft"
   },
   "agentControl": {
+    "cancelStop": "cancel stop",
+    "unsupported": "This engine doesn't read control replies, so these buttons can't reach it. Use its terminal.",
     "deliveryPaused": "queued messages held (whole floor)",
     "halting": "stopping after this step…",
     "steersQueued": "{{count}} notes waiting",
@@ -261,6 +263,9 @@
       "blankUnlimited": "blank = unlimited"
     },
     "autonomy": {
+        "usdCap": "Floor spend cap ($)",
+        "defaultAgentCap": "Default agent token cap",
+        "defaultAgentCapHint": "For agents with no cap of their own. Temps and the orchestrator are exempt.",
       "autonomy": "Autonomy",
       "autoOn": "Autonomous — agents act without asking",
       "autoOff": "Ask-first — agents pause for tool approval",
@@ -379,6 +384,10 @@
     "unsavedWarning": "You have unsaved settings. Close anyway and lose them?"
   },
   "commandCenter": {
+    "sendTo": "Send to",
+    "sendPick": "Send results to…",
+    "sent": "Sent to {{name}}.",
+    "sendSubject": "Search results: {{query}}",
     "title": "COMMAND CENTER",
     "runsTheFloor": "{{name}} runs the floor",
     "deliveryPaused": "paused",
@@ -1173,6 +1182,19 @@
     "catalogUnreachable": "could not reach the catalog"
   },
   "workersTab": {
+    "hireTitle": "Hire a temp",
+    "hirePlaceholder": "Describe the one job. It runs now and spends tokens.",
+    "hire": "hire",
+    "history": "Finished temps",
+    "noHistory": "No temp has finished yet.",
+    "end_done": "finished",
+    "end_token_cap": "hit its token cap",
+    "end_idle": "stopped for being idle",
+    "end_stopped": "stopped by you",
+    "end_crashed": "ended unexpectedly",
+    "ranFor": "ran {{age}}",
+    "endedAgo": "ended {{age}} ago",
+    "keptAt": "kept worktree: {{path}}",
     "stopping": "stopping",
     "working": "working",
     "liveWorkers": "Live workers",
@@ -1214,6 +1236,12 @@
     "legendInformTopic": "inform/topic"
   },
   "integrations": {
+    "logEmpty": "No calls yet.",
+    "logShow": "Show activity ({{count}})",
+    "logHide": "Hide activity",
+    "logLast": "Last call: {{status}}, {{when}}",
+    "logFailed": "no response",
+    "logTest": "test",
     "errLabel": "Give it a label.",
     "errId": "Could not derive a valid id from the label.",
     "errBaseUrl": "Base URL is required.",

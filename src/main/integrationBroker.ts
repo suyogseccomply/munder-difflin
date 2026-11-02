@@ -63,6 +63,8 @@ export interface IntegrationBrokerDeps {
   getRecord: (id: string) => IntegrationRecord | undefined;
   /** Decrypt a secret by ref (injected — the secret store). Main-internal. */
   getSecret: (secretRef: string | undefined) => string | undefined;
+  /** Told about each authorised call. Carries no path, query, header or body. */
+  onEvent?: (e: { integrationId: string; method: string; status: number; ms: number }) => void;
 }
 
 /** True for IPv4 loopback (127.0.0.0/8) and IPv6 ::1 (incl. v4-mapped). Mirrors slack.ts. */
@@ -185,6 +187,12 @@ export class IntegrationBroker {
     const integrationId = decodeURIComponent(m[1]);
     const path = m[2] ?? '';
     const query = m[3] ?? '';
+    const startedAt = Date.now();
+    res.once('close', () => {
+      try {
+        this.deps.onEvent?.({ integrationId, method: (req.method ?? 'GET').toUpperCase(), status: res.statusCode, ms: Date.now() - startedAt });
+      } catch { /* a log must never break the call it records */ }
+    });
 
     // 4) Authorize against this worker's capability.
     if (!cap.allowedIds.has(integrationId)) {

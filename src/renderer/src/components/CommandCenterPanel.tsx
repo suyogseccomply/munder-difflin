@@ -12,6 +12,7 @@ import { TriggersTab } from './triggers/TriggersTab';
 import { TriggerHistoryTab } from './triggers/TriggerHistoryTab';
 import { WorkersTab } from './WorkersTab';
 import { SkillsTab } from './SkillsTab';
+import { SendToAgent } from './SendToAgent';
 import { acquireTerminal, disposeTerminal, resetTerminal } from './terminalPool';
 import { terminalInstanceKey } from './terminalRecovery';
 import { Icon } from './Icon';
@@ -144,8 +145,12 @@ export function CommandCenterPanel({ agent, fullscreen = false }: { agent: Agent
   const toggleFloorDelivery = async () => {
     const next = !floorDeliveryPaused;
     setFloorDeliveryPaused(next);
-    const all = useStore.getState().agents;
-    await Promise.all(all.map((a) => window.cth.controlAutoDelivery(a.id, next).catch(() => null)));
+    await window.cth.controlFloorDelivery(next).catch(() => null);
+    // Releasing the floor also releases per-agent holds, as this button always has.
+    if (!next) {
+      const all = useStore.getState().agents;
+      await Promise.all(all.map((a) => window.cth.controlAutoDelivery(a.id, false).catch(() => null)));
+    }
   };
 
   return (
@@ -1110,7 +1115,7 @@ function MemoryTab({ godId, who: controlledWho, onWho }: { godId: string; who?: 
     setTextBusy(true);
     try {
       const res = await window.cth.textSearch(textQuery.trim());
-      setTextResults(res.ok ? res.results.slice(0, 10) : []);
+      setTextResults(res.ok ? res.results.slice(0, 30) : []);
     } catch { setTextResults([]); }
     finally { setTextBusy(false); setTextSearched(true); }
   };
@@ -1140,6 +1145,7 @@ function MemoryTab({ godId, who: controlledWho, onWho }: { godId: string; who?: 
             ))}
           </div>
         )}
+        {textResults.length > 0 && <SendToAgent text={textResults.map((r) => `[${r.source}] ${r.excerpt}`).join('\n')} query={textQuery} />}
         {textSearched && textResults.length === 0 && <Muted>{t('commandCenter.nothingMatched')}</Muted>}
       </Section>
 
@@ -1157,6 +1163,7 @@ function MemoryTab({ godId, who: controlledWho, onWho }: { godId: string; who?: 
           </PixelButton>
         </div>
         {searchOut && <Pre>{searchOut}</Pre>}
+        {searchOut && <SendToAgent text={searchOut} query={query} />}
       </Section>
 
       <Section title={t('commandCenter.memoryFile')}>

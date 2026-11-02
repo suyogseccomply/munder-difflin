@@ -138,7 +138,7 @@ interface AgentBreakerState {
 export class CircuitBreaker {
   private agents = new Map<string, AgentBreakerState>();
 
-  constructor(private getConfig: () => CircuitBreakerConfig & { costCapUsd?: number; costCapTokens?: number; agentTokenCaps?: Record<string, number> }) {}
+  constructor(private getConfig: () => CircuitBreakerConfig & { defaultAgentTokenCap?: number; costCapUsd?: number; costCapTokens?: number; agentTokenCaps?: Record<string, number> }) {}
 
   private cfg() {
     const c = this.getConfig() ?? {};
@@ -150,7 +150,8 @@ export class CircuitBreaker {
       tokenVelocityPerMin: c.tokenVelocityPerMin ?? DEFAULTS.tokenVelocityPerMin,
       costCapUsd: c.costCapUsd,
       costCapTokens: c.costCapTokens,
-      agentTokenCaps: c.agentTokenCaps
+      agentTokenCaps: c.agentTokenCaps,
+      defaultAgentTokenCap: c.defaultAgentTokenCap
     };
   }
 
@@ -349,7 +350,7 @@ export class CircuitBreaker {
     // dominates it — and an agent stopped four minutes in for re-reads it does not
     // control learns to distrust the breaker. The reason names both figures so an
     // operator can see what tripped and what the agent cost.
-    const perAgentCap = cfg.agentTokenCaps?.[input.agentId];
+    const perAgentCap = cfg.agentTokenCaps?.[input.agentId] ?? defaultCapFor(input.agentId, cfg.defaultAgentTokenCap);
     if (typeof perAgentCap === 'number' && perAgentCap > 0) {
       const work = workTokensOf(input.sample);
       if (work > perAgentCap) {
@@ -413,4 +414,10 @@ export class CircuitBreaker {
     }
     return { tripping: false, reason: '' };
   }
+}
+
+/** The default cap for an agent with none of its own. Temps have their own cap path,
+ *  and the orchestrator is left out as tripping it would stall the whole floor. */
+export function defaultCapFor(agentId: string, cap: number | undefined): number | undefined {
+  return agentId === 'god' || agentId.startsWith('worker-') ? undefined : cap;
 }

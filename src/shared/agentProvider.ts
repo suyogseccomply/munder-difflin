@@ -737,3 +737,12 @@ export function installInfoForProvider(
     docsUrl: p.docsUrl
   };
 }
+
+/** Providers whose CLI reads the hook's reply. The controls ride that reply, so on
+ *  any other provider the control can't take effect and must say so. */
+const HOOK_REPLY_PROVIDERS: ReadonlySet<string> = new Set(['claude', 'codex', 'antigravity', 'gemini', 'grok']);
+
+export function controlSupportForProvider(provider: string | undefined): { tools: boolean; halt: boolean; steer: boolean } {
+  const ok = provider === undefined || HOOK_REPLY_PROVIDERS.has(provider);
+  return { tools: ok, halt: ok, steer: ok };
+}

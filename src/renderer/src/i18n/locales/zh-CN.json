@@ -60,6 +60,8 @@
     "typing": "你的草稿"
   },
   "agentControl": {
+    "cancelStop": "取消停止",
+    "unsupported": "此引擎不读取控制回复，这些按钮无法作用于它。请使用其终端。",
     "deliveryPaused": "队列消息已暂停投递（整个楼层）",
     "halting": "正在此步骤结束后停止…",
     "steersQueued": "有 {{count}} 条笔记等待处理",
@@ -261,6 +263,9 @@
       "blankUnlimited": "留空 = 无限制"
     },
     "autonomy": {
+        "usdCap": "楼层支出上限（$）",
+        "defaultAgentCap": "智能体默认令牌上限",
+        "defaultAgentCapHint": "适用于没有单独上限的智能体。临时工和协调者除外。",
       "autonomy": "自主权",
       "autoOn": "自主模式——智能体无需询问即可行动",
       "autoOff": "先询问——智能体在工具批准前暂停",
@@ -379,6 +384,10 @@
     "unsavedWarning": "你有未保存的设置。仍要关闭并放弃这些更改吗？"
   },
   "commandCenter": {
+    "sendTo": "发送给",
+    "sendPick": "将结果发送给…",
+    "sent": "已发送给 {{name}}。",
+    "sendSubject": "搜索结果：{{query}}",
     "title": "命令中心",
     "runsTheFloor": "{{name}} 掌管楼层",
     "deliveryPaused": "已暂停",
@@ -1173,6 +1182,19 @@
     "catalogUnreachable": "无法访问目录"
   },
   "workersTab": {
+    "hireTitle": "雇用临时工",
+    "hirePlaceholder": "描述这一项任务。它会立即运行并消耗令牌。",
+    "hire": "雇用",
+    "history": "已结束的临时工",
+    "noHistory": "还没有临时工结束。",
+    "end_done": "已完成",
+    "end_token_cap": "达到令牌上限",
+    "end_idle": "因空闲而停止",
+    "end_stopped": "由你停止",
+    "end_crashed": "意外结束",
+    "ranFor": "运行了 {{age}}",
+    "endedAgo": "{{age}} 前结束",
+    "keptAt": "保留的工作树：{{path}}",
     "stopping": "停止中",
     "working": "工作中",
     "liveWorkers": "活跃工人",
@@ -1214,6 +1236,12 @@
     "legendInformTopic": "告知/主题"
   },
   "integrations": {
+    "logEmpty": "还没有调用。",
+    "logShow": "显示活动（{{count}}）",
+    "logHide": "隐藏活动",
+    "logLast": "最近一次调用：{{status}}，{{when}}",
+    "logFailed": "无响应",
+    "logTest": "测试",
     "errLabel": "请给它一个名称。",
     "errId": "无法从该名称派生出有效的 ID。",
     "errBaseUrl": "必须填写基础 URL。",

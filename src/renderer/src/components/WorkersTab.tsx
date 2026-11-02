@@ -87,6 +87,17 @@ export function WorkersTab() {
       .finally(() => { refresh(); });
   }, [refresh]);
 
+  const [history, setHistory] = useState<Awaited<ReturnType<typeof window.cth.workersHistory>>>([]);
+  useEffect(() => { void window.cth.workersHistory().then(setHistory).catch(() => { /* none */ }); }, [data?.live.length]);
+  const [job, setJob] = useState('');
+  const [jobNote, setJobNote] = useState('');
+  const godCwd = useStore((s) => s.agents.find((a) => a.isGod)?.cwd);
+  const hire = async () => {
+    setJobNote('');
+    const res = await window.cth.workersStart({ objective: job, cwd: godCwd });
+    if (res.ok) { setJob(''); refresh(); } else setJobNote(res.error);
+  };
+
   const live = data?.live ?? [];
   const preserved = data?.preserved ?? [];
   const max = data?.maxWorkers ?? 4;
@@ -150,6 +161,20 @@ export function WorkersTab() {
         )}
       </div>
 
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <span style={sectionHead}>{t('workersTab.hireTitle')}</span>
+        <textarea
+          value={job}
+          onChange={(e) => setJob(e.target.value)}
+          aria-label={t('workersTab.hireTitle')}
+          placeholder={t('workersTab.hirePlaceholder')}
+          rows={2}
+          style={{ padding: 6, border: 'none', outline: 'none', resize: 'vertical', background: 'var(--cth-paper-100)', boxShadow: 'inset 0 0 0 1px var(--cth-ink-100)', fontFamily: 'var(--cth-font-ui)', fontSize: 12, color: 'var(--cth-ink-900)' }}
+        />
+        <div><PixelButton onClick={() => void hire()} disabled={!job.trim()}>{t('workersTab.hire')}</PixelButton></div>
+        {jobNote && <span style={{ fontSize: 11, color: 'var(--cth-coral)' }}>{jobNote}</span>}
+      </div>
+
       {preserved.length > 0 && (
         <div>
           <span style={sectionHead}>{t('workersTab.preserved', { count: preserved.length })}</span>
@@ -172,6 +197,29 @@ export function WorkersTab() {
           </div>
         </div>
       )}
+
+      <div>
+        <span style={sectionHead}>{t('workersTab.history')}</span>
+        {history.length === 0
+          ? <div style={{ ...card, color: 'var(--cth-ink-700)', fontFamily: 'var(--cth-font-ui)', fontSize: 12 }}>{t('workersTab.noHistory')}</div>
+          : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+              {history.map((h) => (
+                <div key={`${h.workerId}-${h.endedAt}`} style={card}>
+                  <div style={{ fontFamily: 'var(--cth-font-ui)', fontSize: 12, fontWeight: 600, color: 'var(--cth-ink-900)' }}>{h.name}</div>
+                  {h.objective && <div style={{ fontFamily: 'var(--cth-font-ui)', fontSize: 12, color: 'var(--cth-ink-700)' }}>{h.objective.slice(0, 240)}</div>}
+                  <div style={metaRow}>
+                    <span>{t(`workersTab.end_${h.endReason.replace('-', '_')}`)}</span>
+                    <span>{t('workersTab.ranFor', { age: relAge(Math.max(0, h.endedAt - h.startedAt)) })}</span>
+                    <span>{t('workersTab.tokens', { value: fmtTokens(h.tokens) })}</span>
+                    <span>{t('workersTab.endedAgo', { age: relAge(Math.max(0, Date.now() - h.endedAt)) })}</span>
+                    {h.keptWorktree && <span style={{ wordBreak: 'break-all' }}>{t('workersTab.keptAt', { path: h.keptWorktree })}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+      </div>
     </div>
   );
 }

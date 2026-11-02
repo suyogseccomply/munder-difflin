@@ -83,6 +83,10 @@ export interface HarnessConfig {
    *  mcpDefaults for that agent; no grant means the floor default applies. */
   agentMcpGrants?: { [agentId: string]: { [serverId: string]: boolean } };
   /** Servers the user added from the capabilities list, keyed by entry id. */
+  /** Token cap for agents with none of their own. Temps and the orchestrator excepted. */
+  defaultAgentTokenCap?: number;
+  /** Holds every agent's message queue, including agents spawned later. */
+  floorDeliveryPaused?: boolean;
   capabilityServers?: { [id: string]: { label: string; command: string; args: string[]; secretNames: string[] } };
   semanticMemory: boolean;
   embeddingModel: 'minilm' | 'embeddinggemma';

@@ -70,6 +70,17 @@ import { resolveGodName } from '../shared/godIdentity';
 import { fetchHireManifest, prepareHireExport, readHireManifestFiles } from './hire';
 import { loadCapabilityList } from './capabilityList';
 import {
+  WORKER_HISTORY_LIMIT,
+  appendIntegrationEvent,
+  appendLedger,
+  integrationEvents,
+  isWorkerHistoryRow,
+  readLedger,
+  updateLedger,
+  type WorkerEndReason
+} from './jsonLedger';
+import { controlSupportForProvider } from '../shared/agentProvider';
+import {
   deleteSecret as deleteCapabilityKey,
   getSecret as getCapabilityKey,
   hasSecret as hasCapabilityKey,
@@ -257,7 +268,7 @@ const hive = new HiveManager(
 );
 // #7C — operator control state (pause/gate/steer/halt), read by the HookServer
 // when deciding hook returns.
-const control = new ControlRegistry();
+const control = new ControlRegistry((id) => controlSupportForProvider(hive.registry().agents[id]?.provider).steer);
 // Stage 7A — the live observability tap. Receives Claude Code's first-party OTel
 // over loopback OTLP/JSON and exposes the locked usage-provider seam. resolveCwd
 // lets the transcript fallback find an agent's cwd from the hive registry.
@@ -380,7 +391,14 @@ const worktreePaths = new Map<string, string>();
 const worktreeOrigins = new Map<string, string>();
 
 /** A live god-triggered ephemeral worker, tracked from spawn to teardown. */
+const integrationLogPath = (): string => join(app.getPath('userData'), 'integration-log.json');
+const workerHistoryPath = (): string => join(app.getPath('userData'), 'worker-history.json');
+
 interface WorkerRec {
+  objective?: string;
+  provider?: string;
+  /** Why it is being released. Unset at teardown means it died on its own. */
+  endReason?: WorkerEndReason;
   workerId: string;       // == the PTY id == hive agent id (`worker-<reqId>`)
   reqId: string;          // the spawn-request id
   name?: string;          // display name (for the worker tab)
@@ -403,7 +421,8 @@ const liveWorkers = new Map<string, WorkerRec>();
  *  granted a per-worker capability token at spawn (revoked in teardownPty). */
 const integrationBroker = new IntegrationBroker({
   getRecord: integrations.getRecord,
-  getSecret: integrations.getSecret
+  getSecret: integrations.getSecret,
+  onEvent: (e) => appendIntegrationEvent(integrationLogPath(), { ...e, source: 'worker', at: Date.now() })
 });
 
 /** BYOK backend model-providers whose API keys the non-Claude CLI engines
@@ -454,6 +473,22 @@ const preservedWorktrees = new Map<string, PreservedWorktree>();
  * step is wrapped so a teardown error can never crash the caller (an IPC
  * handler or node-pty's onExit).
  */
+/** One history row per temp that ends, whichever way it ended. */
+function recordWorkerEnd(id: string): void {
+  const rec = liveWorkers.get(id);
+  if (!rec) return;
+  appendLedger(workerHistoryPath(), {
+    workerId: id,
+    name: rec.name ?? id,
+    objective: rec.objective ?? '',
+    provider: rec.provider ?? 'claude',
+    startedAt: rec.spawnedAt,
+    endedAt: Date.now(),
+    tokens: workerTokensUsed(id),
+    endReason: rec.endReason ?? 'crashed'
+  }, isWorkerHistoryRow, WORKER_HISTORY_LIMIT);
+}
+
 function teardownPty(id: string): void {
   // Ephemeral-worker flag, read BEFORE the cleanup below deletes the entry. All
   // worker deaths (done-release, idle/token reap, manual stop, crash) funnel
@@ -461,6 +496,8 @@ function teardownPty(id: string): void {
   // (workers card via the hive:agentSpawned broadcast in processSpawnRequest).
   // pty id == worker id == agent id for workers.
   const wasWorker = liveWorkers.has(id);
+  // Read before the cleanup below, which wipes the worker's token count.
+  if (wasWorker) recordWorkerEnd(id);
   // 0) Revoke this id's broker capability (if any). Idempotent + harmless for a
   //    non-worker PTY; ensures a dead worker's token can never reach an integration.
   try { integrationBroker.revoke(id); } catch { /* best-effort */ }
@@ -472,6 +509,7 @@ function teardownPty(id: string): void {
     try { workerWake.forget(agentId, id); } catch { /* best-effort */ }
     // Drop breaker state so a dead agent can't leak/zombie a tripped level.
     try { breaker.forget(agentId); } catch { /* best-effort */ }
+    try { control.forgetRun(agentId); } catch { /* best-effort */ }
     // A replacement using this id needs a new usage counter, not the dead PTY's.
     try { telemetry.forgetAgent(agentId); } catch { /* best-effort */ }
     // Same reason, for the Grok ledger gate: a respawned agent's first sample
@@ -546,6 +584,7 @@ async function finalizeWorkerWorktree(wtPath: string, origCwd: string, worker: W
     const work = await worktreeHasUnintegratedWork(wtPath, worker.baseBranch);
     if (work.keep) {
       console.warn(`[worker] PRESERVING worktree with unintegrated work: ${wtPath} (${work.detail})`);
+      updateLedger(workerHistoryPath(), isWorkerHistoryRow, (r) => r.workerId === worker.workerId, { keptWorktree: wtPath });
       // Track it so the GC sweep can reclaim it (+ scratch dir) once integrated —
       // the worker is gone from liveWorkers by now, so its identity lives here.
       preservedWorktrees.set(wtPath, {
@@ -3205,7 +3244,7 @@ ipcMain.handle('providerKey:clear', (_evt, backend: unknown) => {
 });
 // Probe an integration's reachability through the broker's own auth path (admin-only;
 // runs in main, so the secret is used but never returned — only the upstream status).
-ipcMain.handle('integrations:test', async (_evt, payload: unknown) => {
+async function probeIntegration(payload: unknown) {
   const p = (payload ?? {}) as { id?: unknown; path?: unknown };
   if (typeof p.id !== 'string' || !p.id) return { ok: false, error: 'id required' };
   const rec = integrations.getRecord(p.id);
@@ -3229,7 +3268,18 @@ ipcMain.handle('integrations:test', async (_evt, payload: unknown) => {
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
+}
+ipcMain.handle('integrations:test', async (_evt, payload: unknown) => {
+  const startedAt = Date.now();
+  const result = await probeIntegration(payload);
+  const id = (payload as { id?: unknown } | null)?.id;
+  if (typeof id === 'string' && id) {
+    const status = (result as { status?: unknown }).status;
+    appendIntegrationEvent(integrationLogPath(), { integrationId: id, source: 'test', method: 'GET', status: typeof status === 'number' ? status : 0, ms: Date.now() - startedAt, at: Date.now() });
+  }
+  return result;
 });
+ipcMain.handle('integrations:log', (_evt, id: unknown) => (typeof id === 'string' ? integrationEvents(integrationLogPath(), id) : []));
 
 // ─── IPC: config ────────────────────────────────────────────────────────────
 ipcMain.handle('config:get', (): HarnessConfig => readConfig());
@@ -4077,6 +4127,12 @@ ipcMain.handle('control:autoDelivery', (_evt, agentId: unknown, paused: unknown)
   writeConfig({ autoDeliveryPausedAgents: Array.from(current).sort() });
   return control.snapshot(agentId);
 });
+ipcMain.handle('control:floorDelivery', (_evt, paused: unknown) => {
+  const on = paused === true;
+  control.setFloorDeliveryPaused(on);
+  writeConfig({ floorDeliveryPaused: on });
+  return on;
+});
 ipcMain.handle('control:resume', (_evt, agentId: unknown) => {
   if (typeof agentId !== 'string') return null;
   control.resume(agentId);
@@ -4142,6 +4198,10 @@ ipcMain.handle('hive:textSearch', (_evt, query: unknown) => {
     for (const id of readdirSync(agentsDir)) {
       targets.push({ path: join(agentsDir, id, 'memory.md'), source: `${id}/memory.md` });
     }
+  }
+  for (const [id, a] of Object.entries(hive.registry().agents)) {
+    const label = `${a.name} ${a.role ?? ''}`.trim();
+    if (`${id} ${label}`.toLowerCase().includes(q)) results.push({ source: 'agents', excerpt: label });
   }
   for (const { path, source } of targets) {
     if (!existsSync(path)) continue;
@@ -4293,7 +4353,8 @@ function sanitizeContextRule(patch: Partial<ContextRule> | undefined, current: C
     everyMs: num(p.everyMs, current.everyMs, 60_000, 86_400_000),
     minContextPct: num(p.minContextPct, current.minContextPct, 0, 100),
     minContextPctLargeWindow: num(p.minContextPctLargeWindow, current.minContextPctLargeWindow, 0, 100),
-    message: typeof p.message === 'string' ? p.message : current.message
+    message: typeof p.message === 'string' ? p.message : current.message,
+    onFill: typeof p.onFill === 'boolean' ? p.onFill : current.onFill
   };
 }
 
@@ -4909,7 +4970,7 @@ async function processSpawnRequest(filePath: string): Promise<void> {
   // tokenCap is optional plumbing (default unlimited) — only a positive finite cap is kept.
   const tokenCap = typeof raw.tokenCap === 'number' && Number.isFinite(raw.tokenCap) && raw.tokenCap > 0
     ? raw.tokenCap : undefined;
-  liveWorkers.set(workerId, { workerId, reqId, name: meta.name, slack, baseBranch, spawnedAt: Date.now(), tokenCap });
+  liveWorkers.set(workerId, { workerId, reqId, name: meta.name, slack, baseBranch, spawnedAt: Date.now(), tokenCap, objective, provider: raw.provider ?? 'claude' });
 
   // Dispatch the objective via the standard inbox path (zero new transport),
   // reusing the autonomous-request preamble so the worker gets the exact Slack
@@ -5016,6 +5077,7 @@ async function ephemeralWorkerTick(): Promise<void> {
       if (doneAt !== null) {
         // Success: the worker already replied in-thread; just release it.
         rec.releasing = true;
+        rec.endReason = 'done';
         console.log(`[worker] ${workerId} signaled done — releasing`);
         // Its mailbox is finished with too. Workers seldom file their own work
         // order before signaling done, and the id is reused on every re-hire of
@@ -5059,6 +5121,7 @@ async function ephemeralWorkerTick(): Promise<void> {
         const used = workerTokensUsed(workerId);
         if (used > tokenCap) {
           rec.releasing = true;
+          rec.endReason = 'token-cap';
           console.warn(`[worker] reaping ${workerId} — token cap (${used.toLocaleString()} > ${tokenCap.toLocaleString()})`);
           informGod(
             `[worker reaped — token cap] ${workerId}`,
@@ -5074,6 +5137,7 @@ async function ephemeralWorkerTick(): Promise<void> {
       if (idleMs === undefined) continue; // PTY already gone; teardownPty cleans up
       if (idleMs > idleTimeoutMs) {
         rec.releasing = true;
+        rec.endReason = 'idle';
         console.warn(`[worker] reaping idle ${workerId} (${Math.round(idleMs / 60000)}min idle)`);
         informGod(
           `[worker reaped — idle] ${workerId}`,
@@ -5194,12 +5258,38 @@ ipcMain.handle('workers:list', (): { live: WorkerSnapshot[]; preserved: Preserve
  *  exit arrives the exit-handler's stale-id guard already misreads it as a
  *  reclaimed id and skips teardown — the worker would stay "live" in registry.json
  *  and fleet.json forever after this call. */
+ipcMain.handle('workers:history', () => readLedger(workerHistoryPath(), isWorkerHistoryRow));
+
+/** A person hiring a temp. Their click is the spend decision, so the
+ *  orchestratorMaySpawn gate (which holds back unprompted spawns) doesn't apply. */
+ipcMain.handle('workers:start', async (_evt, payload: unknown) => {
+  const p = (payload ?? {}) as { objective?: unknown; name?: unknown; cwd?: unknown };
+  const objective = typeof p.objective === 'string' ? p.objective.trim() : '';
+  if (!objective) return { ok: false as const, error: 'describe the job first' };
+  if (liveWorkers.size >= Math.max(1, readConfig().maxConcurrentWorkers ?? 4)) {
+    return { ok: false as const, error: 'all temp slots are busy' };
+  }
+  const dir = spawnRequestsDir();
+  if (!dir) return { ok: false as const, error: 'no hive open' };
+  mkdirSync(dir, { recursive: true });
+  const id = `human-${Date.now().toString(36)}`;
+  const file = join(dir, `${id}.json`);
+  writeFileSync(file, JSON.stringify({
+    id, objective,
+    name: typeof p.name === 'string' && p.name.trim() ? p.name.trim().slice(0, 40) : undefined,
+    cwd: typeof p.cwd === 'string' ? p.cwd : undefined
+  }));
+  await processSpawnRequest(file);
+  return { ok: true as const };
+});
+
 ipcMain.handle('workers:stop', (_evt, workerId: string): { ok: boolean; error?: string } => {
   if (typeof workerId !== 'string' || !workerId) return { ok: false, error: 'invalid worker id' };
   const rec = liveWorkers.get(workerId);
   if (!rec) return { ok: false, error: 'no such live worker' };
   if (rec.releasing) return { ok: true }; // already stopping
   rec.releasing = true;
+  rec.endReason = 'stopped';
   console.log(`[worker] manual stop requested for ${workerId}`);
   try { ptyManager.kill(workerId); } catch (e) { return { ok: false, error: String(e) }; }
   teardownPty(workerId);
@@ -5238,6 +5328,7 @@ function bootstrapHiveServices(): void {
     platform: process.platform
   });
   control.replaceAutoDeliveryPauses(readConfig().autoDeliveryPausedAgents ?? []);
+  control.setFloorDeliveryPaused(readConfig().floorDeliveryPaused === true);
   archiveOrphanedAgents(); // #57/#58: archive stale archived:false entries with no live PTY
   hive.startRouter();
   startEphemeralWorkerWatcher(); // poll HIVE_ROOT/spawn-requests → ephemeral workers

@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react';
+import { IntegrationLog } from './IntegrationLog';
 import { useTranslation } from 'react-i18next';
 import { authTypeNeedsSecret as needsSecret } from '@shared/integrations';
 import { PixelButton } from './PixelButton';
@@ -402,6 +403,7 @@ export function IntegrationsRegistry() {
                     </span>
                     {rt && <span style={{ fontSize: 12, color: rt.ok ? 'var(--cth-mint-700, #1f7a4d)' : 'var(--cth-danger, #6E1423)' }}>· {fmtTest(rt)}</span>}
                   </div>
+                  <IntegrationLog id={r.id} refresh={rowTest[r.id]} />
                 </div>
               );
             })}

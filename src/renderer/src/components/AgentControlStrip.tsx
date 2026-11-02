@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { PixelButton } from './PixelButton';
 import { AgentHoldButton } from './AgentHoldButton';
 import { isComposingKey } from '@shared/imeGuard';
+import { controlSupportForProvider } from '@shared/agentProvider';
 
 /**
  * Operator control for one agent (#7C.1-7C.3) — pause (deny tools at the next
@@ -33,17 +34,21 @@ interface Snapshot {
   pendingSteers: number;
 }
 
-export function AgentControlStrip({ agentId }: { agentId: string }) {
+export function AgentControlStrip({ agentId, provider }: { agentId: string; provider?: string }) {
   const { t } = useTranslation();
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [steer, setSteer] = useState('');
   const [note, setNote] = useState('');
   const noteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const support = controlSupportForProvider(provider);
 
   useEffect(() => {
     let alive = true;
-    window.cth.controlSnapshot(agentId).then((s) => { if (alive && s) setSnap(s); }).catch(() => { /* none */ });
-    return () => { alive = false; };
+    const read = () => window.cth.controlSnapshot(agentId).then((s) => { if (alive && s) setSnap(s); }).catch(() => { /* none */ });
+    void read();
+    // Steers drain and halts land in main, so a one-off read goes stale.
+    const timer = setInterval(() => void read(), 3000);
+    return () => { alive = false; clearInterval(timer); };
   }, [agentId]);
 
   const flash = (m: string) => {
@@ -56,6 +61,11 @@ export function AgentControlStrip({ agentId }: { agentId: string }) {
     const s = snap?.paused ? await window.cth.controlResume(agentId) : await window.cth.controlPause(agentId, true);
     if (s) setSnap(s);
     flash(snap?.paused ? t('agentControl.flashResumed') : t('agentControl.flashPaused'));
+  };
+  const resume = async () => {
+    const s = await window.cth.controlResume(agentId);
+    if (s) setSnap(s);
+    flash(t('agentControl.flashResumed'));
   };
   const halt = async () => {
     const s = await window.cth.controlHalt(agentId);
@@ -81,7 +91,7 @@ export function AgentControlStrip({ agentId }: { agentId: string }) {
         {/* Neither of these kills anything, and the old two-word labels never
             said so — the difference is WHEN the agent stops and whether it keeps
             its session. Say the consequence on the button, the detail on hover. */}
-        <PixelButton variant={snap?.paused ? 'primary' : 'secondary'} size="sm" onClick={togglePause}>
+        <PixelButton variant={snap?.paused ? 'primary' : 'secondary'} size="sm" onClick={togglePause} disabled={!support.tools}>
           <span
             className="cth-tip cth-tip-left cth-tip-wrap"
             data-tip={snap?.paused
@@ -92,7 +102,7 @@ export function AgentControlStrip({ agentId }: { agentId: string }) {
             {snap?.paused ? t('agentControl.allowTools') : t('agentControl.blockTools')}
           </span>
         </PixelButton>
-        <PixelButton variant="destructive" size="sm" onClick={halt}>
+        <PixelButton variant="destructive" size="sm" onClick={halt} disabled={!support.halt}>
           <span
             className="cth-tip cth-tip-left cth-tip-wrap"
             data-tip={t('agentControl.stopAfterStepTip')}
@@ -112,6 +122,7 @@ export function AgentControlStrip({ agentId }: { agentId: string }) {
           <span style={{ fontSize: 11, color: 'var(--cth-ink-500)' }}>{t('agentControl.deliveryPaused')}</span>
         )}
         {snap?.halted && <span style={{ fontSize: 11, color: 'var(--cth-coral)' }}>{t('agentControl.halting')}</span>}
+        {snap?.halted && <PixelButton variant="secondary" size="sm" onClick={() => void resume()}>{t('agentControl.cancelStop')}</PixelButton>}
         {!!snap?.pendingSteers && <span style={{ fontSize: 11, color: 'var(--cth-ink-500)' }}>{t('agentControl.steersQueued', { count: snap.pendingSteers })}</span>}
       </div>
       <div style={{ display: 'flex', gap: 6 }}>
@@ -127,7 +138,7 @@ export function AgentControlStrip({ agentId }: { agentId: string }) {
             fontSize: 12, color: 'var(--cth-ink-900)', outline: 'none'
           }}
         />
-        <PixelButton variant="secondary" size="sm" onClick={sendSteer} disabled={!steer.trim()}>
+        <PixelButton variant="secondary" size="sm" onClick={sendSteer} disabled={!steer.trim() || !support.steer}>
           <span
             className="cth-tip cth-tip-wrap"
             data-tip={t('agentControl.steerTip')}
@@ -135,6 +146,7 @@ export function AgentControlStrip({ agentId }: { agentId: string }) {
           >{t('agentControl.steer')}</span>
         </PixelButton>
       </div>
+      {!support.steer && <span style={{ fontSize: 11, color: 'var(--cth-ink-500)' }}>{t('agentControl.unsupported')}</span>}
       {note && <span style={{ fontSize: 11, color: 'var(--cth-ink-500)' }}>{note}</span>}
     </div>
   );

@@ -42,6 +42,12 @@ interface AgentControl {
 
 export class ControlRegistry {
   private readonly map = new Map<string, AgentControl>();
+  /** Holds every agent's queue, including agents spawned after it was set. */
+  private floorDeliveryPaused = false;
+
+  /** `canDeliverSteer` says whether an agent's CLI reads hook replies. A steer
+   *  taken for one that doesn't is lost while the UI reports it as sent. */
+  constructor(private readonly canDeliverSteer: (id: string) => boolean = () => true) {}
 
   private ensure(id: string): AgentControl {
     let c = this.map.get(id);
@@ -88,6 +94,16 @@ export class ControlRegistry {
     }
     q.push(t.slice(0, 10000)); // hook additionalContext cap
   }
+  setFloorDeliveryPaused(on: boolean): void { this.floorDeliveryPaused = on; }
+  /** The agent's process ended. A halt and queued steers belonged to that run, so
+   *  they must not carry over and stop its replacement at the first hook. A pause
+   *  is the operator's standing decision about the agent, so it stays. */
+  forgetRun(id: string): void {
+    const c = this.map.get(id);
+    if (!c) return;
+    c.halted = false;
+    c.steerQueue.length = 0;
+  }
   /** Request a graceful stop at the next hook boundary. */
   halt(id: string): void { this.ensure(id).halted = true; }
   /** Drop all queued-but-undelivered steer notes (e.g. closing time cancelled
@@ -100,7 +116,7 @@ export class ControlRegistry {
 
   shouldHalt(id: string): boolean { return this.map.get(id)?.halted ?? false; }
   isAutoDeliveryPaused(id: string): boolean {
-    return this.map.get(id)?.autoDeliveryPaused ?? false;
+    return this.floorDeliveryPaused || (this.map.get(id)?.autoDeliveryPaused ?? false);
   }
 
   /** Whether a tool call should be denied (paused agent, or this tool gated). */
@@ -113,14 +129,16 @@ export class ControlRegistry {
   }
 
   /** Dequeue one pending steer note for delivery, or undefined. */
-  takeSteer(id: string): string | undefined { return this.map.get(id)?.steerQueue.shift(); }
+  takeSteer(id: string): string | undefined {
+    return this.canDeliverSteer(id) ? this.map.get(id)?.steerQueue.shift() : undefined;
+  }
 
   snapshot(id: string): AgentControlSnapshot {
     const c = this.map.get(id);
     return {
       paused: c?.paused ?? false,
       halted: c?.halted ?? false,
-      autoDeliveryPaused: c?.autoDeliveryPaused ?? false,
+      autoDeliveryPaused: this.floorDeliveryPaused || (c?.autoDeliveryPaused ?? false),
       gatedTools: c ? Array.from(c.gatedTools) : [],
       pendingSteers: c?.steerQueue.length ?? 0
     };

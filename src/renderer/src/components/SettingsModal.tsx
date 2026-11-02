@@ -320,10 +320,14 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
   // replaced the old dollar cap as the user-facing budget.
   type BreakerCfgView = HarnessConfig & {
     costCapTokens?: number;
+    costCapUsd?: number;
+    defaultAgentTokenCap?: number;
     circuitBreaker?: { tokenVelocityPerMin?: number; enabled?: boolean; hardStop?: boolean; repeatedToolLimit?: number; errorStormLimit?: number };
   };
   const breakerCfg = config as BreakerCfgView;
   const [agentBudget, setAgentBudget] = useState(breakerCfg.costCapTokens != null ? String(breakerCfg.costCapTokens) : '');
+  const [usdCap, setUsdCap] = useState(breakerCfg.costCapUsd != null ? String(breakerCfg.costCapUsd) : '');
+  const [defaultCap, setDefaultCap] = useState(breakerCfg.defaultAgentTokenCap != null ? String(breakerCfg.defaultAgentTokenCap) : '');
   const [velocityCeiling, setVelocityCeiling] = useState(breakerCfg.circuitBreaker?.tokenVelocityPerMin != null ? String(breakerCfg.circuitBreaker.tokenVelocityPerMin) : '');
   // v0.3.4: the four previously UI-less breaker fields get controls.
   const [brkEnabled, setBrkEnabled] = useState<boolean>(breakerCfg.circuitBreaker?.enabled !== false);
@@ -337,6 +341,8 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
     const storm = brkErrStorm.trim() === '' ? undefined : Number(brkErrStorm);
     return {
       costCapTokens: Number.isFinite(tokens as number) ? (tokens as number) : undefined,
+      costCapUsd: usdCap.trim() !== '' && Number(usdCap) > 0 ? Number(usdCap) : undefined,
+      defaultAgentTokenCap: defaultCap.trim() !== '' && Number(defaultCap) > 0 ? Number(defaultCap) : undefined,
       circuitBreaker: {
         ...(breakerCfg.circuitBreaker ?? {}),
         enabled: brkEnabled,
@@ -547,6 +553,8 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
       const cc = c as BreakerCfgView;
       setNotifications(cc.notifications === true);
       setAgentBudget(cc.costCapTokens != null ? String(cc.costCapTokens) : '');
+      setUsdCap(cc.costCapUsd != null ? String(cc.costCapUsd) : '');
+      setDefaultCap(cc.defaultAgentTokenCap != null ? String(cc.defaultAgentTokenCap) : '');
       setVelocityCeiling(cc.circuitBreaker?.tokenVelocityPerMin != null ? String(cc.circuitBreaker.tokenVelocityPerMin) : '');
       setSlackEnabled(cc.slackEnabled ?? false);
       setSlackSecret(cc.slackSigningSecret ?? '');
@@ -1319,6 +1327,23 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                               <span style={{ fontSize: 11, color: 'var(--cth-ink-500)' }}>
                                 {fmtBudgetTokens(agentBudget) ? t('settings.autonomy.budgetEquals', { value: fmtBudgetTokens(agentBudget) }) : t('settings.autonomy.budgetTotal')}
                               </span>
+                            </label>
+                            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, ...slackLabelStyle }}>
+                              {t('settings.autonomy.usdCap')}
+                              <input
+                                type="number" min="0" step="1" value={usdCap}
+                                onChange={(e) => setUsdCap(e.target.value)}
+                                style={{ ...slackInputStyle, width: 180 }}
+                              />
+                            </label>
+                            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, ...slackLabelStyle }}>
+                              {t('settings.autonomy.defaultAgentCap')}
+                              <input
+                                type="number" min="0" step="100000" value={defaultCap}
+                                onChange={(e) => setDefaultCap(e.target.value)}
+                                style={{ ...slackInputStyle, width: 180 }}
+                              />
+                              <span style={{ fontSize: 11, color: 'var(--cth-ink-500)' }}>{t('settings.autonomy.defaultAgentCapHint')}</span>
                             </label>
                             <label style={{ display: 'flex', flexDirection: 'column', gap: 4, ...slackLabelStyle }}>
                               {t('settings.autonomy.velocity')}
