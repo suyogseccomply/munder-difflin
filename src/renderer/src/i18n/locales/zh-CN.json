@@ -499,9 +499,7 @@
         "label": "身份",
         "hint": "名字 · 角色 · 颜色"
       },
-      "workspace": {
-    "stapler": "订书机",
-        "label": "工作区",
+      "workspace": {        "label": "工作区",
         "hint": "文件夹 · 隔离 · 恢复"
       },
       "engine": {
@@ -1512,6 +1510,8 @@
     "keyFailed": "无法保存此密钥。"
   },
   "workspace": {
+    "stapler": "订书机",
+    "screen_team": "团队",
     "nav": "工作区",
     "toClassic": "经典",
     "toWorkspace": "工作区",
@@ -1601,5 +1601,36 @@
     "save": "保存",
     "searchMeetings": "搜索会议",
     "noMeetings": "未找到会议。"
+  },
+  "team": {
+    "loading": "加载中…",
+    "relay": "中继",
+    "relayHint": "在办公室之间传递加密消息的服务器。运行方法见 server/README.md。",
+    "save": "保存",
+    "relayError": "无法连接中继：{{error}}",
+    "addTeammate": "添加队友",
+    "createInvite": "创建邀请",
+    "pasteCode": "粘贴对方的邀请码",
+    "join": "加入",
+    "inviteHint": "把它发给队友。24 小时内可用一次。",
+    "noTeammates": "还没有队友。",
+    "whoAnswers": "由谁回复",
+    "you": "你",
+    "remove": "移除",
+    "fingerprint": "安全码。读给队友听，应与对方的一致：",
+    "agentHint": "对方的消息需要你批准。之后智能体会收到，并标记为外部信息。如需回复，请自己在此输入。",
+    "approve": "批准",
+    "reject": "拒绝",
+    "approved": "已转交智能体。",
+    "rejected": "已拒绝。",
+    "filePassword": "文件密码",
+    "download": "下载",
+    "savedTo": "已保存到 {{path}}",
+    "oneDownload": "只能下载一次。密码错误也会用掉这次机会。",
+    "messagePlaceholder": "给 {{name}} 发消息",
+    "send": "发送",
+    "sendFile": "文件",
+    "sendFolder": "文件夹",
+    "passwordHint": "已发送。请通过其他方式把此密码告诉队友。它不会再次显示。"
   }
 }

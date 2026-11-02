@@ -227,6 +227,8 @@ export interface HarnessConfig {
   workspaceView?: 'classic' | 'workspace';
   /** Local speech model for the Stapler. Standard unless the user picks the larger one. */
   staplerModel?: 'standard' | 'larger';
+  /** The Teams relay this office uses. Unset means Teams is off. */
+  teamsRelayUrl?: string;
   capabilityServers?: { [id: string]: { label: string; command: string; args: string[]; secretNames: string[] } };
   /** Enable semantic memory (MemPalace CLI). No-op if mempalace isn't installed. */
   semanticMemory: boolean;

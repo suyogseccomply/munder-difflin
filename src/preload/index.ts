@@ -2,9 +2,12 @@ import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'ele
 import type { AgentProvider } from '../shared/agentProvider';
 import type { HireManifest } from '../shared/hire';
 import type { CapabilityList } from '../shared/capabilities';
+import type { Bundle, ChatMessage, Peer } from '../main/teamsClient';
 import type { MeetingSummary, TranscriptSegment } from '../shared/stapler';
 import type { IntegrationEvent, WorkerHistoryRow } from '../main/jsonLedger';
 export type { HireManifest } from '../shared/hire';
+
+export type TeamsResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
 /** Mirrors CapabilityLoadResult in src/main/capabilityList.ts. */
 export interface CapabilityLoadResult {
@@ -299,6 +302,8 @@ export interface HarnessConfig {
   workspaceView?: 'classic' | 'workspace';
   /** Local speech model for the Stapler. Standard unless the user picks the larger one. */
   staplerModel?: 'standard' | 'larger';
+  /** The Teams relay this office uses. Unset means Teams is off. */
+  teamsRelayUrl?: string;
   capabilityServers?: { [id: string]: { label: string; command: string; args: string[]; secretNames: string[] } };
   semanticMemory: boolean;
   embeddingModel: 'minilm' | 'embeddinggemma';
@@ -856,6 +861,22 @@ const api = {
     const listener = () => cb();
     ipcRenderer.on('stapler:dictateToggle', listener);
     return () => ipcRenderer.removeListener('stapler:dictateToggle', listener);
+  },
+  // ─── Teams ───────────────────────────────────────────────────────────────
+  teamsState: (): Promise<TeamsResult<{ me: Bundle; relayUrl: string; lastError: string; peers: (Peer & { history: ChatMessage[] })[] }>> => ipcRenderer.invoke('teams:state'),
+  teamsSetRelay: (url: string): Promise<TeamsResult<boolean>> => ipcRenderer.invoke('teams:setRelay', url),
+  teamsCreateInvite: (): Promise<TeamsResult<string>> => ipcRenderer.invoke('teams:createInvite'),
+  teamsJoinInvite: (code: string): Promise<TeamsResult<Peer>> => ipcRenderer.invoke('teams:joinInvite', code),
+  teamsSend: (peerId: string, text: string): Promise<TeamsResult<ChatMessage>> => ipcRenderer.invoke('teams:send', peerId, text),
+  teamsSetAnswerer: (peerId: string, agentId: string | null): Promise<TeamsResult<boolean>> => ipcRenderer.invoke('teams:setAnswerer', peerId, agentId),
+  teamsRemovePeer: (peerId: string): Promise<TeamsResult<boolean>> => ipcRenderer.invoke('teams:removePeer', peerId),
+  teamsDecide: (messageId: string, approved: boolean): Promise<TeamsResult<boolean>> => ipcRenderer.invoke('teams:decide', messageId, approved),
+  teamsSendFile: (peerId: string, folder: boolean): Promise<TeamsResult<{ password: string } | null>> => ipcRenderer.invoke('teams:sendFile', peerId, folder),
+  teamsDownloadFile: (id: string, password: string): Promise<TeamsResult<string[] | null>> => ipcRenderer.invoke('teams:downloadFile', id, password),
+  onTeamsChanged: (cb: () => void): (() => void) => {
+    const listener = () => cb();
+    ipcRenderer.on('teams:changed', listener);
+    return () => ipcRenderer.removeListener('teams:changed', listener);
   },
   skillsLocal: (cwd?: string): Promise<LocalSkill[]> => ipcRenderer.invoke('skills:local', cwd),
   /** The browsable skills catalog (cached; `force` re-fetches). */

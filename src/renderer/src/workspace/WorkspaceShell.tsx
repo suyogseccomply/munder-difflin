@@ -14,6 +14,7 @@ import { MemoryTab } from '@/components/CommandCenterPanel';
 import { CapabilitiesPanel } from '@/components/CapabilitiesPanel';
 import { WorkersTab } from '@/components/WorkersTab';
 import { useStore, type Agent } from '@/store/store';
+import { TeamScreen } from './TeamScreen';
 import {
   TASK_COLUMNS,
   floorMessages,
@@ -28,7 +29,7 @@ import {
 } from '@shared/workspace';
 
 const POLL_MS = 5000;
-const NAV: WorkspaceScreen[] = ['tasks', 'inbox', 'automations', 'memory', 'capabilities', 'temps'];
+const NAV: WorkspaceScreen[] = ['tasks', 'inbox', 'automations', 'memory', 'capabilities', 'temps', 'team'];
 
 const screenBox: CSSProperties = { flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--cth-paper-100)', boxShadow: 'inset 0 0 0 1px var(--cth-ink-300)' };
 const scroll: CSSProperties = { flex: 1, minHeight: 0, overflow: 'auto', padding: 12 };
@@ -151,6 +152,7 @@ export function WorkspaceShell() {
         {screen === 'memory' && god && <MemoryScreen godId={god.id} />}
         {screen === 'capabilities' && <div style={scroll}><CapabilitiesPanel /></div>}
         {screen === 'temps' && <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}><WorkersTab /></div>}
+        {screen === 'team' && <TeamScreen />}
       </main>
     </div>
   );

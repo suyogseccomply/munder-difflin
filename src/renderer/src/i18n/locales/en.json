@@ -499,9 +499,7 @@
         "label": "Identity",
         "hint": "name · character · color"
       },
-      "workspace": {
-    "stapler": "Stapler",
-        "label": "Workspace",
+      "workspace": {        "label": "Workspace",
         "hint": "folder · isolation · resume"
       },
       "engine": {
@@ -1512,6 +1510,8 @@
     "keyFailed": "Could not save this key."
   },
   "workspace": {
+    "stapler": "Stapler",
+    "screen_team": "Team",
     "nav": "Workspace",
     "toClassic": "Classic",
     "toWorkspace": "Workspace",
@@ -1601,5 +1601,36 @@
     "save": "save",
     "searchMeetings": "Search meetings",
     "noMeetings": "No meetings found."
+  },
+  "team": {
+    "loading": "Loading…",
+    "relay": "Relay",
+    "relayHint": "The server that passes encrypted messages between offices. See server/README.md to run one.",
+    "save": "save",
+    "relayError": "Can't reach the relay: {{error}}",
+    "addTeammate": "Add a teammate",
+    "createInvite": "create invite",
+    "pasteCode": "Paste their invite code",
+    "join": "join",
+    "inviteHint": "Send this to your teammate. It works once, for 24 hours.",
+    "noTeammates": "No teammates yet.",
+    "whoAnswers": "Who answers",
+    "you": "You",
+    "remove": "remove",
+    "fingerprint": "Safety code. Read it to your teammate, and it should match theirs:",
+    "agentHint": "Their messages wait for your approval. Then the agent receives them marked as outside information. To reply, write here yourself.",
+    "approve": "approve",
+    "reject": "reject",
+    "approved": "Passed to the agent.",
+    "rejected": "Rejected.",
+    "filePassword": "File password",
+    "download": "download",
+    "savedTo": "Saved to {{path}}",
+    "oneDownload": "One download only. A wrong password also uses it up.",
+    "messagePlaceholder": "Message {{name}}",
+    "send": "send",
+    "sendFile": "file",
+    "sendFolder": "folder",
+    "passwordHint": "Sent. Give your teammate this password another way. It is not shown again."
   }
 }

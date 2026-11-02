@@ -6,7 +6,7 @@ export type WorkspaceView = 'classic' | 'workspace';
 export const normalizeWorkspaceView = (v: unknown): WorkspaceView => (v === 'workspace' ? 'workspace' : 'classic');
 
 export type WorkspaceScreen =
-  | 'orchestrator' | 'agents' | 'tasks' | 'inbox' | 'automations' | 'memory' | 'capabilities' | 'temps';
+  | 'orchestrator' | 'agents' | 'tasks' | 'inbox' | 'automations' | 'memory' | 'capabilities' | 'temps' | 'team';
 
 // ─── Tasks ──────────────────────────────────────────────────────────────────
 

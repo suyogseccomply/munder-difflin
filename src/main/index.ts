@@ -70,6 +70,7 @@ import { resolveGodName } from '../shared/godIdentity';
 import { fetchHireManifest, prepareHireExport, readHireManifestFiles } from './hire';
 import { loadCapabilityList } from './capabilityList';
 import { initStapler, shutdownStapler } from './stapler';
+import { initTeams } from './teams';
 import {
   WORKER_HISTORY_LIMIT,
   appendIntegrationEvent,
@@ -5569,6 +5570,12 @@ function onSystemResume(reason: string): void {
 }
 
 app.whenReady().then(() => {
+  initTeams({
+    relayUrl: () => readConfig().teamsRelayUrl,
+    setRelayUrl: (teamsRelayUrl) => { writeConfig({ teamsRelayUrl }); },
+    deliverToAgent: (agentId, subject, body) => { hive.send({ to: agentId, act: 'inform', subject, body }, 'team-relay'); },
+    webContents: () => liveWebContents() ?? null
+  });
   initStapler({
     preloadPath: join(__dirname, '../preload/index.js'),
     rendererUrl: !app.isPackaged ? process.env.ELECTRON_RENDERER_URL : undefined,
