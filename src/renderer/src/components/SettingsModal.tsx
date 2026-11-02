@@ -19,6 +19,7 @@ import { SetupPanel } from './SetupPanel';
 import { Icon } from './Icon';
 import { OfficeThemePicker } from './OfficeThemePicker';
 import { McpDefaultsSettings } from './McpDefaultsSettings';
+import { CapabilitiesPanel } from './CapabilitiesPanel';
 import { IntegrationsRegistry } from './IntegrationsRegistry';
 import { AiEnginesSettings } from './AiEnginesSettings';
 import { REALTIME_MODEL } from '@shared/realtimePricing';
@@ -179,8 +180,8 @@ const sectionHeadFlush = { ...sectionHead, marginBottom: 0 } as const;
 /** The 2px rule between Settings sections. */
 const sectionRule = { height: 2, background: 'var(--cth-ink-300)' } as const;
 
-export type Section = 'General' | 'Prerequisites' | 'Agents & Models' | 'Autonomy & Budgets' | 'Connections' | 'Voice' | 'Memory & Knowledge';
-const NAV_SECTIONS: Section[] = ['General', 'Prerequisites', 'Agents & Models', 'Autonomy & Budgets', 'Connections', 'Voice', 'Memory & Knowledge'];
+export type Section = 'General' | 'Prerequisites' | 'Agents & Models' | 'Autonomy & Budgets' | 'Connections' | 'Capabilities' | 'Voice' | 'Memory & Knowledge';
+const NAV_SECTIONS: Section[] = ['General', 'Prerequisites', 'Agents & Models', 'Autonomy & Budgets', 'Connections', 'Capabilities', 'Voice', 'Memory & Knowledge'];
 /** i18n key for each nav section's label — the Section values themselves stay
  *  as stable identifiers (tab state, deep links). */
 const NAV_SECTION_KEYS: Record<Section, string> = {
@@ -189,6 +190,7 @@ const NAV_SECTION_KEYS: Record<Section, string> = {
   'Agents & Models': 'settings.nav.agentsModels',
   'Autonomy & Budgets': 'settings.nav.autonomyBudgets',
   'Connections': 'settings.nav.connections',
+  'Capabilities': 'settings.nav.capabilities',
   'Voice': 'settings.nav.voice',
   'Memory & Knowledge': 'settings.nav.memoryKnowledge'
 };
@@ -1423,6 +1425,8 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                       </div>
                     </>
                   )}
+
+                  {activeSection === 'Capabilities' && <CapabilitiesPanel />}
 
                   {/* CONNECTIONS — everything external (MCP + Slack + webhook + REST) */}
                   {activeSection === 'Connections' && (

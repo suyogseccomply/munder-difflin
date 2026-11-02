@@ -68,6 +68,20 @@ import { WorkerWakeWatchdog, WORKER_WAKE_REPORT_MS, activityEvidenceAt, type Wor
 import { inboxNudgeText } from '../shared/hiveNudge';
 import { resolveGodName } from '../shared/godIdentity';
 import { fetchHireManifest, prepareHireExport, readHireManifestFiles } from './hire';
+import { loadCapabilityList } from './capabilityList';
+import {
+  deleteSecret as deleteCapabilityKey,
+  getSecret as getCapabilityKey,
+  hasSecret as hasCapabilityKey,
+  setSecret as setCapabilityKey
+} from './integrations';
+import {
+  ROLE_BUNDLES,
+  applyRoleBundle,
+  capabilityKeyRef,
+  isValidKeyName,
+  serverSpecFromEntry
+} from '../shared/capabilities';
 import { parseHireDeepLink, type HireManifest } from '../shared/hire';
 import { ClosingTimeController } from './closingTime';
 import {
@@ -2808,6 +2822,9 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
           theme: readConfig().terminalTheme ?? 'light',
           // W3 — default-MCP consent state + the bundled skills source dir.
           mcpDefaults: readConfig().mcpDefaults,
+          mcpGrants: readConfig().agentMcpGrants?.[opts.hive.id],
+          capabilityServers: readConfig().capabilityServers,
+          mcpSecret: (name) => getCapabilityKey(capabilityKeyRef(name)),
           skillsDir: skillsResourceDir(),
           // The shared palace is mutated by the agent's own `mempalace` calls, so
           // the OS sandbox must let it through (empty when memory is off).
@@ -3598,6 +3615,75 @@ ipcMain.handle('skills:local', (_evt, cwd: unknown): LocalSkill[] => {
 ipcMain.handle('skills:catalog', async (_evt, force: unknown) => {
   const cachePath = join(app.getPath('userData'), 'skill-catalog.json');
   return loadCatalog(cachePath, { force: force === true });
+});
+
+// ─── IPC: capabilities ───────────────────────────────────────────────────────
+const capabilityCachePath = (): string => join(app.getPath('userData'), 'capability-list.json');
+
+ipcMain.handle('capabilities:list', (_evt, force: unknown) =>
+  loadCapabilityList(capabilityCachePath(), { force: force === true }));
+
+/** Adds a server to the user's list. Takes only an id: the launch command is read
+ *  from the signature-checked list here, never accepted from the renderer. */
+ipcMain.handle('capabilities:addServer', async (_evt, id: unknown) => {
+  if (typeof id !== 'string') return { ok: false as const, error: 'bad request' };
+  const { list } = await loadCapabilityList(capabilityCachePath());
+  const entry = list?.entries.find((e) => e.id === id);
+  const spec = entry && serverSpecFromEntry(entry);
+  if (!entry || !spec) return { ok: false as const, error: 'this entry has no server this app can start' };
+  const config = writeConfig({
+    capabilityServers: {
+      ...readConfig().capabilityServers,
+      [id]: { label: entry.name, command: spec.command, args: spec.args, secretNames: entry.secretNames }
+    }
+  });
+  return { ok: true as const, config };
+});
+
+/** Removes the server and every agent's grant for it. */
+ipcMain.handle('capabilities:removeServer', (_evt, id: unknown) => {
+  const cfg = readConfig();
+  if (typeof id !== 'string') return cfg;
+  const capabilityServers = { ...cfg.capabilityServers };
+  delete capabilityServers[id];
+  const agentMcpGrants = Object.fromEntries(Object.entries(cfg.agentMcpGrants ?? {}).map(([agent, grants]) => {
+    const rest = { ...grants };
+    delete rest[id];
+    return [agent, rest];
+  }));
+  return writeConfig({ capabilityServers, agentMcpGrants });
+});
+
+ipcMain.handle('capabilities:setGrant', (_evt, agentId: unknown, serverId: unknown, value: unknown) => {
+  const cfg = readConfig();
+  if (typeof agentId !== 'string' || typeof serverId !== 'string' || typeof value !== 'boolean') return cfg;
+  return writeConfig({
+    agentMcpGrants: {
+      ...cfg.agentMcpGrants,
+      [agentId]: { ...cfg.agentMcpGrants?.[agentId], [serverId]: value }
+    }
+  });
+});
+
+ipcMain.handle('capabilities:applyBundle', (_evt, agentId: unknown, bundleId: unknown) => {
+  const bundle = ROLE_BUNDLES.find((b) => b.id === bundleId);
+  if (typeof agentId !== 'string' || !bundle) return { ok: false as const, error: 'bad request' };
+  const cfg = readConfig();
+  const { grants, needsConsent } = applyRoleBundle(bundle, cfg.agentMcpGrants?.[agentId]);
+  const config = writeConfig({ agentMcpGrants: { ...cfg.agentMcpGrants, [agentId]: grants } });
+  return { ok: true as const, config, needsConsent };
+});
+
+/** Keys are write-only over IPC: this reports whether one is saved, never its value. */
+ipcMain.handle('capabilities:keyStatus', (_evt, names: unknown) => {
+  if (!Array.isArray(names)) return {};
+  return Object.fromEntries(names.filter(isValidKeyName).map((n) => [n, hasCapabilityKey(capabilityKeyRef(n))]));
+});
+
+ipcMain.handle('capabilities:setKey', (_evt, name: unknown, value: unknown) => {
+  if (!isValidKeyName(name) || typeof value !== 'string') return { ok: false, error: 'bad request' };
+  if (!value) { deleteCapabilityKey(capabilityKeyRef(name)); return { ok: true }; }
+  return setCapabilityKey(capabilityKeyRef(name), value);
 });
 
 /** Install one catalog skill into ~/.claude/skills. Structured refusals, never a

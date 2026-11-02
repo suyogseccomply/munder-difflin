@@ -79,6 +79,11 @@ export interface HarnessConfig {
   /** Per-server consent for the default MCP bundle, keyed by catalog id (mirrors
    *  src/main/config.ts; seeded from MCP_CATALOG). */
   mcpDefaults?: { [id: string]: { enabled: boolean } };
+  /** Per-agent MCP grants, keyed by agent id then server id. A grant overrides
+   *  mcpDefaults for that agent; no grant means the floor default applies. */
+  agentMcpGrants?: { [agentId: string]: { [serverId: string]: boolean } };
+  /** Servers the user added from the capabilities list, keyed by entry id. */
+  capabilityServers?: { [id: string]: { label: string; command: string; args: string[]; secretNames: string[] } };
   semanticMemory: boolean;
   embeddingModel: 'minilm' | 'embeddinggemma';
   missions?: ScheduledMission[];

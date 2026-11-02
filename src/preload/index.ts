@@ -1,7 +1,16 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 import type { AgentProvider } from '../shared/agentProvider';
 import type { HireManifest } from '../shared/hire';
+import type { CapabilityList } from '../shared/capabilities';
 export type { HireManifest } from '../shared/hire';
+
+/** Mirrors CapabilityLoadResult in src/main/capabilityList.ts. */
+export interface CapabilityLoadResult {
+  list: CapabilityList | null;
+  issuedAt?: string;
+  stale: boolean;
+  error?: string;
+}
 import type { IntegrationRecord, IntegrationTemplate } from '../shared/integrations';
 export type { IntegrationRecord, IntegrationTemplate } from '../shared/integrations';
 import type { UpdateStatus } from '../shared/updateState';
@@ -276,6 +285,11 @@ export interface HarnessConfig {
   /** Per-server consent for the default MCP bundle, keyed by catalog id. Mirrors
    *  src/main/config.ts. */
   mcpDefaults?: { [id: string]: { enabled: boolean } };
+  /** Per-agent MCP grants, keyed by agent id then server id. A grant overrides
+   *  mcpDefaults for that agent; no grant means the floor default applies. */
+  agentMcpGrants?: { [agentId: string]: { [serverId: string]: boolean } };
+  /** Servers the user added from the capabilities list, keyed by entry id. */
+  capabilityServers?: { [id: string]: { label: string; command: string; args: string[]; secretNames: string[] } };
   semanticMemory: boolean;
   embeddingModel: 'minilm' | 'embeddinggemma';
   missions?: ScheduledMission[];
@@ -797,6 +811,19 @@ const api = {
     catalog: ModelCatalog | null; fetchedAt: number; stale: boolean;
   }> => ipcRenderer.invoke('models:catalog', force),
   /** Skills already installed for the coding agents on this machine. */
+  // ─── Capabilities marketplace ────────────────────────────────────────────
+  capabilitiesList: (force?: boolean): Promise<CapabilityLoadResult> => ipcRenderer.invoke('capabilities:list', force),
+  capabilitiesAddServer: (id: string): Promise<{ ok: true; config: HarnessConfig } | { ok: false; error: string }> =>
+    ipcRenderer.invoke('capabilities:addServer', id),
+  capabilitiesRemoveServer: (id: string): Promise<HarnessConfig> => ipcRenderer.invoke('capabilities:removeServer', id),
+  capabilitiesSetGrant: (agentId: string, serverId: string, value: boolean): Promise<HarnessConfig> =>
+    ipcRenderer.invoke('capabilities:setGrant', agentId, serverId, value),
+  capabilitiesApplyBundle: (agentId: string, bundleId: string): Promise<{ ok: true; config: HarnessConfig; needsConsent: string[] } | { ok: false; error: string }> =>
+    ipcRenderer.invoke('capabilities:applyBundle', agentId, bundleId),
+  /** Whether each key is saved. Values are never readable from the renderer. */
+  capabilitiesKeyStatus: (names: string[]): Promise<Record<string, boolean>> => ipcRenderer.invoke('capabilities:keyStatus', names),
+  capabilitiesSetKey: (name: string, value: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('capabilities:setKey', name, value),
   skillsLocal: (cwd?: string): Promise<LocalSkill[]> => ipcRenderer.invoke('skills:local', cwd),
   /** The browsable skills catalog (cached; `force` re-fetches). */
   skillsCatalog: (force?: boolean): Promise<{

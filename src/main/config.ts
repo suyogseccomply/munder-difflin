@@ -215,6 +215,11 @@ export interface HarnessConfig {
    *  Seeded from MCP_CATALOG (safe-readonly ON, write/secret OFF); the user flips
    *  these in Settings. A server is wired into an agent only when enabled here. */
   mcpDefaults?: { [id: string]: { enabled: boolean } };
+  /** Per-agent MCP grants, keyed by agent id then server id. A grant overrides
+   *  mcpDefaults for that agent; no grant means the floor default applies. */
+  agentMcpGrants?: { [agentId: string]: { [serverId: string]: boolean } };
+  /** Servers the user added from the capabilities list, keyed by entry id. */
+  capabilityServers?: { [id: string]: { label: string; command: string; args: string[]; secretNames: string[] } };
   /** Enable semantic memory (MemPalace CLI). No-op if mempalace isn't installed. */
   semanticMemory: boolean;
   /** Embedding model for the palace: lightweight 'minilm' or multilingual 'embeddinggemma'. */
