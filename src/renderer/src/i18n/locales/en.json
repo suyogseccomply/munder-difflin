@@ -1474,6 +1474,12 @@
     "templatesSearch": "Search templates"
   },
   "capabilities": {
+    "runStep": "run it for me",
+    "runConfirm": "Run the command shown above?",
+    "runYes": "yes, run it",
+    "runNo": "no",
+    "bundledSkills": "Bundled skills. Skills in your own skills folder stay shared by all Claude agents.",
+    "connections": "Connections it can use",
     "browse": "Browse",
     "whoHasWhat": "Who has what",
     "loading": "Loading the list…",
@@ -1675,6 +1681,8 @@
     "used": "{{value}} used"
   },
   "tempRouting": {
+    "copyManifest": "Copy Slack manifest",
+    "manifestCopied": "Copied. Paste it into Slack: Create an app, From a manifest.",
     "aTemp": "A temp",
     "cloneOf": "A temp, clone of {{name}}",
     "perAgent": "Temps per agent",
@@ -1688,5 +1696,14 @@
     "tickets": "Tickets",
     "agents": "Agents",
     "notes": "Notes"
+  },
+  "engineSetup": {
+    "notInstalled": "{{label}} is not installed on this computer",
+    "installsItself": "It will install itself in the agent's terminal when you spawn, using this command:",
+    "installFirst": "The app has no installer for it. Install it yourself, then check again.",
+    "signIn": "Sign in happens in the agent's terminal the first time it runs.",
+    "copy": "copy command",
+    "manual": "set up manually",
+    "checkAgain": "check again"
   }
 }

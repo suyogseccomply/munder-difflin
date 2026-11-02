@@ -104,6 +104,10 @@ export interface HarnessConfig {
   ticketPrefix?: string;
   /** Which view the app opens in. Unset keeps whichever was last used. */
   defaultView?: 'classic' | 'workspace';
+  /** Bundled skills turned off per agent. Absent means all are on. */
+  agentSkillGrants?: { [agentId: string]: { [skillId: string]: boolean } };
+  /** Integrations each lasting agent may reach. Absent means none. */
+  agentIntegrationGrants?: { [agentId: string]: string[] };
   capabilityServers?: { [id: string]: { label: string; command: string; args: string[]; secretNames: string[] } };
   semanticMemory: boolean;
   embeddingModel: 'minilm' | 'embeddinggemma';

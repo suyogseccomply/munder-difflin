@@ -114,7 +114,9 @@ function shouldTrigger(ev, botUserId, channelId, activatedThreads) {
   if (!ev) return { trigger: false, text: '', files: [] };
 
   // Channel filter
-  const channelOk = !channelId || ev.channel === channelId;
+  // One id or several, separated by commas or spaces. Empty means every channel.
+  const allowed = String(channelId || '').split(/[\s,]+/).filter(Boolean);
+  const channelOk = allowed.length === 0 || allowed.includes(ev.channel);
   if (!channelOk) return { trigger: false, text: '', files: [] };
 
   // Self-loop + subtype safety: never trigger on bot posts, edits, joins, etc.

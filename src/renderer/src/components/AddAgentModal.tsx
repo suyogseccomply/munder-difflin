@@ -11,6 +11,7 @@ import { type AccentColorName } from '@/design/tokens';
 import type { HireManifest } from '@shared/hire';
 import { hireQueueProgress } from '@shared/hireQueue';
 import { HireTemplatePicker } from './HireTemplatePicker';
+import { EngineSetupCard } from './EngineSetupCard';
 import { MCP_CATALOG } from '@shared/mcpCatalog';
 import {
   OSS_LOCAL_PICKS,
@@ -1140,6 +1141,8 @@ export function AddAgentModal({ onClose, config, onConfigChange }: AddAgentModal
                 </div>
               )}
             </div>
+
+            <EngineSetupCard provider={provider} label={providerPreset(provider).label} />
 
             {showTemplates && (
               <HireTemplatePicker onPick={(m) => { applyManifest(m); setShowTemplates(false); }} />

@@ -246,3 +246,84 @@ test('servers reach Claude through --mcp-config=, not a settings file', () => {
   assert.match(hive, /args\.push\(`--mcp-config=\$\{mcpPath\}`\)/);
   assert.ok(!/args\.push\('--mcp-config'/.test(hive));
 });
+
+// ─── Install steps, skills and integrations ─────────────────────────────────
+
+const { integrationsForAgent, isRunnableStep, skillsForAgent } = loadTs('src/shared/capabilities.ts');
+
+test('only exact, reviewed-shape commands can be run for the user', () => {
+  for (const ok of [
+    ['claude', 'mcp', 'add', 'x', '--', 'npx', '-y', 'pkg'],
+    ['claude', 'mcp', 'add', '--transport', 'http', 'x', 'https://x.example/mcp'],
+    ['claude', 'plugin', 'install', 'skill-creator@claude-plugins-official'],
+    ['codex', 'mcp', 'add', 'x', '--url', 'https://x.example/mcp']
+  ]) assert.equal(isRunnableStep(ok), true, ok.join(' '));
+  for (const bad of [
+    ['claude', 'mcp', 'add'],
+    ['claude', '--dangerously-skip-permissions'],
+    ['claude', 'mcp', 'remove', 'x'],
+    ['npx', '-y', 'evil'],
+    ['brew', 'install', 'x'],
+    ['powershell', '-c', 'x'],
+    ['claude', 'mcp', 'add', 'x', 'a&calc'],
+    ['claude', 'mcp', 'add', 'x', 'a|b'],
+    ['claude', 'mcp', 'add', 'x', 'a b'],
+    ['claude', 'mcp', 'add', 'x', '%PATH%'],
+    ['claude', 'mcp', 'add', 'x', 'https://x?a=1&b=2'],
+    'claude mcp add x', null, [], [1, 2, 3]
+  ]) assert.equal(isRunnableStep(bad), false, String(bad));
+});
+
+test('skills are on unless turned off, and integrations are off unless granted', () => {
+  assert.deepEqual(skillsForAgent(['a', 'b'], undefined), ['a', 'b']);
+  assert.deepEqual(skillsForAgent(['a', 'b'], { a: false, b: true }), ['b']);
+  assert.deepEqual(integrationsForAgent(['x', 'y'], undefined), []);
+  assert.deepEqual(integrationsForAgent(['x', 'y'], ['y', 'revoked']), ['y']);
+});
+
+test('a skill turned off for an agent is removed, and the others are copied', () => {
+  const { HiveManager } = loadTs('src/main/hive.ts');
+  const { mkdirSync, existsSync } = require('node:fs');
+  const dir = mkdtempSync(join(tmpdir(), 'munder-skills-'));
+  try {
+    const src = join(dir, 'src');
+    const dest = join(dir, 'dest');
+    for (const id of ['keep', 'drop']) { mkdirSync(join(src, id), { recursive: true }); writeFileSync(join(src, id, 'SKILL.md'), id); }
+    const hive = new HiveManager(() => dir);
+    hive.copyBundledSkills(src, dest);
+    assert.equal(existsSync(join(dest, 'drop', 'SKILL.md')), true);
+    hive.copyBundledSkills(src, dest, { drop: false });
+    assert.equal(existsSync(join(dest, 'drop')), false);
+    assert.equal(existsSync(join(dest, 'keep', 'SKILL.md')), true);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// ─── Slack ──────────────────────────────────────────────────────────────────
+
+const { channelAllowed, parseChannelList, slackManifest } = loadTs('src/shared/slackSetup.ts');
+
+test('channel lists parse, and an empty one means every channel', () => {
+  assert.deepEqual(parseChannelList(' C1, C2  C3 '), ['C1', 'C2', 'C3']);
+  assert.deepEqual(parseChannelList(undefined), []);
+  assert.equal(channelAllowed([], 'C9'), true);
+  assert.equal(channelAllowed(['C1'], 'C1'), true);
+  assert.equal(channelAllowed(['C1'], 'C9'), false);
+  assert.equal(channelAllowed(['C1'], undefined), false);
+});
+
+test('the trigger filter accepts several channels', () => {
+  const { shouldTrigger } = require('../src/main/slack-trigger.cjs');
+  const ev = (channel) => ({ channel, text: '<@BOT> hi', user: 'U', ts: '1', type: 'app_mention' });
+  const threads = { has: () => false, add: () => {} };
+  assert.equal(shouldTrigger(ev('C2'), 'BOT', 'C1, C2', threads).trigger, true);
+  assert.equal(shouldTrigger(ev('C3'), 'BOT', 'C1, C2', threads).trigger, false);
+  assert.equal(shouldTrigger(ev('C3'), 'BOT', '', threads).trigger, true);
+});
+
+test('the manifest subscribes to mentions and direct messages, and uses a given URL', () => {
+  const m = JSON.parse(slackManifest('https://t.example/slack'));
+  assert.equal(m.settings.event_subscriptions.request_url, 'https://t.example/slack');
+  for (const e of ['app_mention', 'message.channels', 'message.groups', 'message.im']) assert.ok(m.settings.event_subscriptions.bot_events.includes(e), e);
+  assert.ok(m.oauth_config.scopes.bot.includes('chat:write'));
+  assert.ok(!JSON.parse(slackManifest(undefined)).settings.event_subscriptions.request_url.includes('undefined'));
+});

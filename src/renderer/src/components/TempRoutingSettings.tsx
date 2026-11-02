@@ -1,4 +1,5 @@
-import type { CSSProperties } from 'react';
+import { useState, type CSSProperties } from 'react';
+import { slackManifest } from '@shared/slackSetup';
 import { useTranslation } from 'react-i18next';
 import type { HarnessConfig } from '@/store/config';
 import { tempsPerAgent } from '@shared/tempRouting';
@@ -25,8 +26,18 @@ export function TempsPerAgentSetting({ config }: { config: HarnessConfig }) {
 
 export function AnswerBySettings({ config }: { config: HarnessConfig }) {
   const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+  const copyManifest = async () => {
+    const status = await window.cth.slackStatus?.().catch(() => null);
+    await navigator.clipboard.writeText(slackManifest(status?.url ?? undefined));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1800);
+  };
   return (
-    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+      <button type="button" onClick={() => void copyManifest()} style={{ ...field, cursor: 'pointer' }}>
+        {copied ? t('tempRouting.manifestCopied') : t('tempRouting.copyManifest')}
+      </button>
       {(['slackAnswerBy', 'webhookAnswerBy'] as const).map((key) => (
         <label key={key} style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--cth-ink-700)' }}>
           {t(`tempRouting.${key}`)}

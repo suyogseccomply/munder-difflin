@@ -320,3 +320,32 @@ export function filterCapabilities(
     && (!q || `${e.name} ${e.what} ${e.maker}`.toLowerCase().includes(q))
   );
 }
+
+// ─── Running a reviewed install step ────────────────────────────────────────
+
+/** The only commands the app will run for the user, as exact leading words. They add
+ *  a server or plugin to a CLI's own config, and nothing else. */
+const RUNNABLE_PREFIXES: readonly (readonly string[])[] = [
+  ['claude', 'mcp', 'add'],
+  ['claude', 'plugin', 'install'],
+  ['codex', 'mcp', 'add']
+];
+
+/** Arguments may hold URLs, but no whitespace or shell metacharacters. */
+const STEP_ARG_RE = /^[A-Za-z0-9@._:/=+,~-]{1,300}$/;
+
+export function isRunnableStep(argv: unknown): argv is string[] {
+  if (!Array.isArray(argv) || argv.length > 40 || !argv.every((a) => typeof a === 'string' && STEP_ARG_RE.test(a))) return false;
+  return RUNNABLE_PREFIXES.some((p) => argv.length > p.length && p.every((word, i) => argv[i] === word));
+}
+
+/** Skill folders one agent gets: all of them unless a grant turns one off. The ids are
+ *  folder names read from disk, so nothing here can name a path elsewhere. */
+export function skillsForAgent(all: readonly string[], grants: { [id: string]: boolean } | undefined): string[] {
+  return all.filter((id) => grants?.[id] !== false);
+}
+
+/** Integrations one agent may reach: only ones granted and still enabled. */
+export function integrationsForAgent(enabled: readonly string[], granted: readonly string[] | undefined): string[] {
+  return enabled.filter((id) => granted?.includes(id));
+}

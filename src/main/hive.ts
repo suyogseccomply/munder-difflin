@@ -729,6 +729,8 @@ export class HiveManager {
       /** Consent state for the default-MCP bundle (W3). Threaded from the live
        *  HarnessConfig by the caller; undefined → catalog defaults apply. */
       mcpDefaults?: { [id: string]: { enabled: boolean } };
+      /** Bundled skills switched off for this agent. */
+      skillGrants?: { [id: string]: boolean };
       /** This agent's own MCP grants, applied over mcpDefaults. */
       mcpGrants?: AgentMcpGrants;
       /** Servers added from the capabilities list; each still needs a grant. */
@@ -769,7 +771,7 @@ export class HiveManager {
     // app-resources skills/ dir on every spawn (same policy as identity.md), so an
     // agent always rides with the shipped safe skill set. Tolerant: a missing or
     // partial source dir is a no-op (Kevin populates the resource dir in lp-manifest).
-    if (opts.skillsDir) this.copyBundledSkills(opts.skillsDir, join(dir, '.claude', 'skills'));
+    if (opts.skillsDir) this.copyBundledSkills(opts.skillsDir, join(dir, '.claude', 'skills'), opts.skillGrants);
 
     const memory = join(dir, 'memory.md');
     if (!existsSync(memory)) {
@@ -1334,9 +1336,15 @@ export class HiveManager {
    * (Kevin populates the resource dir in lp-manifest), and any IO error is swallowed
    * so skill provisioning can never block a spawn.
    */
-  private copyBundledSkills(srcDir: string, destDir: string): void {
+  private copyBundledSkills(srcDir: string, destDir: string, grants?: { [id: string]: boolean }): void {
     try {
       if (!existsSync(srcDir)) return;
+      // A copy never removes anything, so a skill turned off goes explicitly. The name
+      // comes from the bundled folder listing, never from config.
+      const all = readdirSync(srcDir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
+      for (const id of all) {
+        if (grants?.[id] === false) rmSync(join(destDir, id), { recursive: true, force: true });
+      }
       const copyTree = (from: string, to: string): void => {
         const entries = readdirSync(from, { withFileTypes: true });
         if (!entries.length) return;
@@ -1348,7 +1356,13 @@ export class HiveManager {
           else if (ent.isFile()) copyFileSync(s, d);
         }
       };
-      copyTree(srcDir, destDir);
+      for (const ent of readdirSync(srcDir, { withFileTypes: true })) {
+        if (ent.isDirectory() && grants?.[ent.name] === false) continue;
+        const from = join(srcDir, ent.name);
+        const to = join(destDir, ent.name);
+        if (ent.isDirectory()) copyTree(from, to);
+        else if (ent.isFile()) { mkdirSync(destDir, { recursive: true }); copyFileSync(from, to); }
+      }
     } catch (e) { console.error('[hive] copyBundledSkills failed:', e); }
   }
 

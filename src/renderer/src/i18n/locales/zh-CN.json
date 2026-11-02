@@ -1474,6 +1474,12 @@
     "templatesSearch": "搜索模板"
   },
   "capabilities": {
+    "runStep": "替我运行",
+    "runConfirm": "运行上面显示的命令？",
+    "runYes": "是，运行",
+    "runNo": "否",
+    "bundledSkills": "内置技能。你自己技能文件夹中的技能仍由所有 Claude 智能体共享。",
+    "connections": "可使用的连接",
     "browse": "浏览",
     "whoHasWhat": "谁拥有什么",
     "loading": "正在加载列表…",
@@ -1675,6 +1681,8 @@
     "used": "已用 {{value}}"
   },
   "tempRouting": {
+    "copyManifest": "复制 Slack 清单",
+    "manifestCopied": "已复制。粘贴到 Slack：创建应用，从清单创建。",
     "aTemp": "一名临时工",
     "cloneOf": "临时工，克隆自 {{name}}",
     "perAgent": "每个智能体的临时工数",
@@ -1688,5 +1696,14 @@
     "tickets": "工单",
     "agents": "智能体",
     "notes": "笔记"
+  },
+  "engineSetup": {
+    "notInstalled": "此电脑未安装 {{label}}",
+    "installsItself": "启动时会在智能体终端中用此命令自行安装：",
+    "installFirst": "应用没有它的安装程序。请自行安装，然后再次检查。",
+    "signIn": "首次运行时在智能体终端中登录。",
+    "copy": "复制命令",
+    "manual": "手动设置",
+    "checkAgain": "再次检查"
   }
 }

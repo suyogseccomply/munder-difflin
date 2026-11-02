@@ -19,6 +19,7 @@
  * import so it can be unit-/smoke-tested as a plain Node module.
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { channelAllowed, parseChannelList } from '../shared/slackSetup';
 import { request as httpsRequest } from 'node:https';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 // NOTE: `tunnelmole` is an ESM-only package. The Electron main process is bundled
@@ -411,6 +412,8 @@ export interface SlackReplyServerOptions {
    *  this loopback. Lets main record that the thread was already answered so the
    *  done-summary poller can skip it (the poller is a fallback, not a duplicator). */
   onReplied?: (thread_ts: string) => void;
+  /** The allowed-channel setting. Replies elsewhere are refused. */
+  replyChannels?: () => string | undefined;
 }
 
 /**
@@ -427,11 +430,13 @@ export class SlackReplyServer {
   private readonly token: string;
   private readonly getBotToken: () => string | undefined;
   private readonly onReplied?: (thread_ts: string) => void;
+  private readonly replyChannels?: () => string | undefined;
 
   constructor(opts: SlackReplyServerOptions) {
     this.token = opts.token;
     this.getBotToken = opts.getBotToken;
     this.onReplied = opts.onReplied;
+    this.replyChannels = opts.replyChannels;
   }
 
   /** Bind a loopback port (0 ⇒ OS-assigned). Resolves the actual bound port. */
@@ -485,6 +490,9 @@ export class SlackReplyServer {
       if (!botToken) { res.writeHead(503); res.end(JSON.stringify({ ok: false, error: 'no bot token' })); return; }
       if (!parsed.channel || !parsed.thread_ts || !parsed.text) {
         res.writeHead(400); res.end(JSON.stringify({ ok: false, error: 'channel, thread, text required' })); return;
+      }
+      if (!channelAllowed(parseChannelList(this.replyChannels?.()), parsed.channel)) {
+        res.writeHead(403); res.end(JSON.stringify({ ok: false, error: 'channel not in the allowed list' })); return;
       }
       const thread_ts = parsed.thread_ts;
       postSlackReply({ botToken, channel: parsed.channel, thread_ts, text: parsed.text })

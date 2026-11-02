@@ -315,6 +315,10 @@ export interface HarnessConfig {
   ticketPrefix?: string;
   /** Which view the app opens in. Unset keeps whichever was last used. */
   defaultView?: 'classic' | 'workspace';
+  /** Bundled skills turned off per agent. Absent means all are on. */
+  agentSkillGrants?: { [agentId: string]: { [skillId: string]: boolean } };
+  /** Integrations each lasting agent may reach. Absent means none. */
+  agentIntegrationGrants?: { [agentId: string]: string[] };
   capabilityServers?: { [id: string]: { label: string; command: string; args: string[]; secretNames: string[] } };
   semanticMemory: boolean;
   embeddingModel: 'minilm' | 'embeddinggemma';
@@ -892,6 +896,10 @@ const api = {
   tokenLimitsUsage: (): Promise<{ ready: boolean; office: Partial<Record<'fiveHour' | 'daily' | 'weekly' | 'monthly', number>>; agents: Record<string, Partial<Record<'fiveHour' | 'daily' | 'weekly' | 'monthly', number>>> }> => ipcRenderer.invoke('limits:usage'),
   routingSend: (m: { to: string; subject: string; body: string }): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('routing:send', m),
   hiveCreateTicket: (t: { title: string; assignee: string }): Promise<{ ok: true; id: string } | { ok: false; error: string }> => ipcRenderer.invoke('hive:createTicket', t),
+  capabilitiesBundledSkills: (): Promise<string[]> => ipcRenderer.invoke('capabilities:bundledSkills'),
+  capabilitiesSetSkillGrant: (agentId: string, skillId: string, value: boolean): Promise<HarnessConfig> => ipcRenderer.invoke('capabilities:setSkillGrant', agentId, skillId, value),
+  capabilitiesSetIntegrationGrant: (agentId: string, integrationId: string, value: boolean): Promise<HarnessConfig> => ipcRenderer.invoke('capabilities:setIntegrationGrant', agentId, integrationId, value),
+  capabilitiesRunStep: (entryId: string, stepIndex: number): Promise<{ ok: true; ptyId: string } | { ok: false; error: string }> => ipcRenderer.invoke('capabilities:runStep', entryId, stepIndex),
   skillsLocal: (cwd?: string): Promise<LocalSkill[]> => ipcRenderer.invoke('skills:local', cwd),
   /** The browsable skills catalog (cached; `force` re-fetches). */
   skillsCatalog: (force?: boolean): Promise<{

@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PixelButton } from './PixelButton';
+import { PtyTerminalView } from './PtyTerminalView';
 import { useStore, type Agent } from '@/store/store';
 import type { HarnessConfig } from '@/store/config';
 import { MCP_CATALOG } from '@shared/mcpCatalog';
 import {
   CAPABILITY_KINDS,
   ROLE_BUNDLES,
+  isRunnableStep,
   bundledServerEnabled,
   filterCapabilities,
   serverSpecFromEntry,
@@ -158,7 +160,14 @@ function EntryRow({ entry, open, onToggle, config, onConfig }: {
 }) {
   const { t } = useTranslation();
   const [note, setNote] = useState('');
+  const [confirming, setConfirming] = useState<number | null>(null);
+  const [running, setRunning] = useState<string | null>(null);
   const spec = useMemo(() => serverSpecFromEntry(entry), [entry]);
+  const runStep = async (index: number) => {
+    setConfirming(null);
+    const res = await window.cth.capabilitiesRunStep(entry.id, index);
+    if (res.ok) setRunning(res.ptyId); else setNote(res.error);
+  };
   const added = !!config.capabilityServers?.[entry.id];
 
   const addServer = async () => {
@@ -228,11 +237,22 @@ function EntryRow({ entry, open, onToggle, config, onConfig }: {
                 <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                   {s.label && <span style={muted}>{s.label}</span>}
                   <code dir="ltr" style={code}>{s.argv.join(' ')}</code>
-                  <div><PixelButton variant="secondary" size="sm" onClick={() => copy(s.argv.join(' '))}>{t('capabilities.copy')}</PixelButton></div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <PixelButton variant="secondary" size="sm" onClick={() => copy(s.argv.join(' '))}>{t('capabilities.copy')}</PixelButton>
+                    {isRunnableStep(s.argv) && (confirming === i
+                      ? <>
+                          <span style={muted}>{t('capabilities.runConfirm')}</span>
+                          <PixelButton variant="primary" size="sm" onClick={() => void runStep(i)}>{t('capabilities.runYes')}</PixelButton>
+                          <PixelButton variant="ghost" size="sm" onClick={() => setConfirming(null)}>{t('capabilities.runNo')}</PixelButton>
+                        </>
+                      : <PixelButton variant="secondary" size="sm" onClick={() => setConfirming(i)}>{t('capabilities.runStep')}</PixelButton>)}
+                  </div>
                 </div>
               ))}
             </div>
           )}
+
+          {running && <div style={{ height: 220, display: 'flex' }}><PtyTerminalView ptyId={running} embedded /></div>}
 
           {entry.manual.length > 0 && (
             <ul style={{ ...muted, margin: 0, paddingInlineStart: 18, overflowWrap: 'anywhere' }}>
@@ -256,6 +276,12 @@ function WhoHasWhatTab({ config, onConfig }: { config: HarnessConfig; onConfig: 
   const [notes, setNotes] = useState<Record<string, string>>({});
 
   const listServers = useMemo(() => Object.entries(config.capabilityServers ?? {}), [config.capabilityServers]);
+  const [skills, setSkills] = useState<string[]>([]);
+  const [integrations, setIntegrations] = useState<{ id: string; label: string }[]>([]);
+  useEffect(() => {
+    void window.cth.capabilitiesBundledSkills().then(setSkills).catch(() => setSkills([]));
+    void window.cth.integrationsList().then((rows) => setIntegrations(rows.filter((r) => r.enabled).map((r) => ({ id: r.id, label: r.label })))).catch(() => setIntegrations([]));
+  }, []);
   const keyNames = useMemo(() => [...new Set([
     ...MCP_CATALOG.flatMap((e) => Object.keys(e.spec.env ?? {})),
     ...listServers.flatMap(([, s]) => s.secretNames ?? [])
@@ -327,6 +353,24 @@ function WhoHasWhatTab({ config, onConfig }: { config: HarnessConfig; onConfig: 
                 <label key={id} title={[s.command, ...s.args].join(' ')} style={{ ...muted, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
                   <input type="checkbox" checked={grants?.[id] === true} onChange={(ev) => void grant(agent.id, id, ev.target.checked)} />
                   {s.label} ({t('capabilities.fromList')})
+                </label>
+              ))}
+            </div>
+            {skills.length > 0 && <span style={muted}>{t('capabilities.bundledSkills')}</span>}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 2 }}>
+              {skills.map((id) => (
+                <label key={id} style={{ ...muted, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={config.agentSkillGrants?.[agent.id]?.[id] !== false} onChange={async (ev) => onConfig(await window.cth.capabilitiesSetSkillGrant(agent.id, id, ev.target.checked))} />
+                  {id}
+                </label>
+              ))}
+            </div>
+            {integrations.length > 0 && <span style={muted}>{t('capabilities.connections')}</span>}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 2 }}>
+              {integrations.map((row) => (
+                <label key={row.id} style={{ ...muted, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={!!config.agentIntegrationGrants?.[agent.id]?.includes(row.id)} onChange={async (ev) => onConfig(await window.cth.capabilitiesSetIntegrationGrant(agent.id, row.id, ev.target.checked))} />
+                  {row.label}
                 </label>
               ))}
             </div>

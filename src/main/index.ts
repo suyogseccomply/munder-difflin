@@ -9,7 +9,7 @@ import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import { join, resolve, sep, basename, dirname, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 import { request as httpsRequest } from 'node:https';
-import { PtyManager, type SpawnOptions } from './pty';
+import { PtyManager, type SpawnOptions, parseNpmCmdShim } from './pty';
 import { resolveCommand as resolveCliCommand, isSafeCommandName } from './shellEnv';
 import { initAutoUpdater, abortPendingRestart } from './updater';
 import { RealtimeFloorWatcher } from './realtimeFloorWatcher';
@@ -103,6 +103,8 @@ import {
 import {
   ROLE_BUNDLES,
   applyRoleBundle,
+  integrationsForAgent,
+  isRunnableStep,
   capabilityKeyRef,
   isValidKeyName,
   serverSpecFromEntry
@@ -1913,6 +1915,7 @@ async function startSlackReplyServer(): Promise<void> {
   slackReplyServer?.stop();
   const token = randomBytes(24).toString('hex');
   slackReplyServer = new SlackReplyServer({
+    replyChannels: () => readConfig().slackChannelId,
     token,
     getBotToken: () => readConfig().slackBotToken,
     // An agent posted a DIRECT substantive reply into this thread → record it so the
@@ -2980,6 +2983,7 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
           // W3 — default-MCP consent state + the bundled skills source dir.
           mcpDefaults: readConfig().mcpDefaults,
           mcpGrants: readConfig().agentMcpGrants?.[opts.hive.id],
+          skillGrants: readConfig().agentSkillGrants?.[opts.hive.id],
           capabilityServers: readConfig().capabilityServers,
           mcpSecret: (name) => getCapabilityKey(capabilityKeyRef(name)),
           skillsDir: skillsResourceDir(),
@@ -2997,6 +3001,17 @@ async function spawnAgentCore(opts: AgentSpawnOptions, owner: Electron.WebConten
       // Point the agent's mempalace CLI at the shared palace + the `kg` CLI at the
       // enterprise knowledge store (both no-ops / empty when their flags are off).
       opts.env = { ...(opts.env ?? {}), ...inj.env, ...memory.env(), ...knowledge.env() };
+      // Integrations granted to this lasting agent, through the same broker temps use:
+      // it holds a capability token, never a credential. Temps bring their own grant.
+      if (!opts.env.MD_BROKER_TOKEN && integrationBroker.running()) {
+        const allowed = integrationsForAgent(integrations.enabledIds(), readConfig().agentIntegrationGrants?.[opts.hive.id]);
+        if (allowed.length) {
+          opts.env.MD_BROKER_URL = integrationBroker.url();
+          opts.env.MD_BROKER_TOKEN = integrationBroker.grant(opts.id, allowed);
+          const brokerNote = `You can call these integrations through the local broker: ${allowed.join(', ')}. Send requests to $MD_BROKER_URL/i/<integration>/<path> with the header "x-md-broker-token: $MD_BROKER_TOKEN". The broker adds the credentials; you never see them.`;
+          setTimeout(() => { try { hive.send({ to: opts.hive!.id, act: 'inform', subject: 'Integrations you can use', body: brokerNote }, 'system'); } catch { /* agent gone */ } }, 3000).unref();
+        }
+      }
     } catch (e) {
       // Hive provisioning is best-effort; never block a spawn on it.
       console.error('[hive] ensureAgent failed:', e);
@@ -3840,6 +3855,46 @@ ipcMain.handle('capabilities:removeServer', (_evt, id: unknown) => {
     return [agent, rest];
   }));
   return writeConfig({ capabilityServers, agentMcpGrants });
+});
+
+ipcMain.handle('capabilities:bundledSkills', () => {
+  try {
+    return readdirSync(skillsResourceDir(), { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort();
+  } catch { return []; }
+});
+ipcMain.handle('capabilities:setSkillGrant', (_evt, agentId: unknown, skillId: unknown, value: unknown) => {
+  const cfg = readConfig();
+  if (typeof agentId !== 'string' || typeof skillId !== 'string' || typeof value !== 'boolean') return cfg;
+  return writeConfig({ agentSkillGrants: { ...cfg.agentSkillGrants, [agentId]: { ...cfg.agentSkillGrants?.[agentId], [skillId]: value } } });
+});
+ipcMain.handle('capabilities:setIntegrationGrant', (_evt, agentId: unknown, integrationId: unknown, value: unknown) => {
+  const cfg = readConfig();
+  if (typeof agentId !== 'string' || typeof integrationId !== 'string' || typeof value !== 'boolean') return cfg;
+  const current = new Set(cfg.agentIntegrationGrants?.[agentId] ?? []);
+  if (value) current.add(integrationId); else current.delete(integrationId);
+  return writeConfig({ agentIntegrationGrants: { ...cfg.agentIntegrationGrants, [agentId]: [...current] } });
+});
+
+/**
+ * Runs one reviewed install step in a visible terminal, after the person has seen the
+ * exact command. Takes an entry id and step number: the command itself comes from the
+ * signature-checked list and is never accepted from the renderer. No shell is involved.
+ * A launcher that can't be run directly is refused rather than handed to cmd.exe.
+ */
+ipcMain.handle('capabilities:runStep', async (evt, entryId: unknown, stepIndex: unknown) => {
+  if (typeof entryId !== 'string' || typeof stepIndex !== 'number') return { ok: false as const, error: 'bad request' };
+  const { list } = await loadCapabilityList(capabilityCachePath());
+  const entry = list?.entries.find((e) => e.id === entryId);
+  const argv = entry?.steps[stepIndex]?.argv;
+  if (!entry?.reviewed || !isRunnableStep(argv)) return { ok: false as const, error: 'this step has to be run by hand' };
+  const bin = ptyManager.commandPath(argv[0]);
+  if (!bin) return { ok: false as const, error: `${argv[0]} is not installed` };
+  if (process.platform === 'win32' && /\.(cmd|bat)$/i.test(bin) && !parseNpmCmdShim(bin, readFileSync(bin, 'utf8'))) {
+    return { ok: false as const, error: 'this launcher can only be run by hand' };
+  }
+  const id = `capability-step-${Date.now().toString(36)}`;
+  const res = ptyManager.spawn({ id, command: argv[0], args: argv.slice(1), cwd: homedir(), cols: 100, rows: 16 }, evt.sender);
+  return res.ok ? { ok: true as const, ptyId: id } : { ok: false as const, error: res.error ?? 'could not start it' };
 });
 
 ipcMain.handle('capabilities:setGrant', (_evt, agentId: unknown, serverId: unknown, value: unknown) => {
