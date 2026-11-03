@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { useTranslation } from 'react-i18next';
 import { addShot, mergeSegments, normalizeRegion, searchMeetings, type MeetingSummary, type Region, type TranscriptSegment } from '@shared/stapler';
 import { TEMP_TARGET, cloneTarget } from '@shared/tempRouting';
+import { faceFromWord, ringPositions } from '@shared/staplerExtras';
 import { ClipRecorder, decodeToSamples, hasSound } from './audio';
 
 type Mode = 'menu' | 'shot' | 'meeting' | 'message' | 'meetings';
@@ -10,6 +11,7 @@ interface Target { id: string; name: string }
 interface Capture { dataUrl: string; width: number; height: number }
 
 const REGION_KEY = 'cth.stapler.lastRegion';
+const FACE_KEY = 'cth.stapler.faceWord';
 const TARGET_KEY = 'cth.stapler.lastTarget';
 const CLIP_MS = 20_000;
 
@@ -38,6 +40,7 @@ export function StaplerApp() {
   const [target, setTargetState] = useState(() => localStorage.getItem(TARGET_KEY) ?? 'god');
   const setTarget = (v: string) => { setTargetState(v); localStorage.setItem(TARGET_KEY, v); };
   const [note, setNote] = useState('');
+  const [faceWord, setFaceWord] = useState(() => localStorage.getItem(FACE_KEY) ?? 'stapler');
 
   // The window is transparent; only the panel or the mascot should paint.
   useEffect(() => {
@@ -70,7 +73,7 @@ export function StaplerApp() {
         aria-label={t('stapler.open')}
         style={{ position: 'fixed', inset: 6, border: 'none', borderRadius: '50%', cursor: 'pointer', background: dictation ? 'var(--cth-coral)' : 'var(--cth-lemon)', boxShadow: 'inset 0 0 0 2px var(--cth-ink-900)', fontSize: 26, color: 'var(--cth-ink-900)' }}
       >
-        <span aria-hidden>{dictation ? '●' : '✎'}</span>
+        {dictation ? <span aria-hidden>●</span> : <StaplerFace word={faceWord} size={52} />}
       </button>
     );
   }
@@ -95,18 +98,25 @@ export function StaplerApp() {
 
       {mode === 'menu' && (
         <>
-          <button type="button" style={button} onClick={() => setMode('shot')}>{t('stapler.screenshot')}</button>
-          <button type="button" style={button} onClick={() => setMode('meeting')}>{t('stapler.meeting')}</button>
-          <button type="button" style={button} onClick={() => setMode('message')}>{t('stapler.message')}</button>
-          <button type="button" style={button} onClick={() => setMode('meetings')}>{t('stapler.meetings')}</button>
-          <label style={{ ...muted, display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer' }}>
+          <Ring
+            face={<StaplerFace word={faceWord} size={64} />}
+            actions={[
+              { label: t('stapler.screenshot'), run: () => setMode('shot') },
+              { label: t('stapler.meeting'), run: () => setMode('meeting') },
+              { label: t('stapler.message'), run: () => setMode('message') },
+              { label: t('stapler.meetings'), run: () => setMode('meetings') },
+              { label: invisible ? t('stapler.visibleAgain') : t('stapler.makeInvisible'), run: () => { const next = !invisible; setInvisible(next); void window.cth.staplerSetInvisible(next); } }
+            ]}
+          />
+          <label style={{ ...muted, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {t('stapler.faceWord')}
             <input
-              type="checkbox"
-              checked={invisible}
-              onChange={(e) => { setInvisible(e.target.checked); void window.cth.staplerSetInvisible(e.target.checked); }}
+              value={faceWord}
+              onChange={(e) => { setFaceWord(e.target.value); localStorage.setItem(FACE_KEY, e.target.value); }}
+              style={field}
             />
-            {t('stapler.invisible')}
           </label>
+          <span style={muted}>{invisible ? t('stapler.hiddenNow') : t('stapler.invisibleHint')}</span>
           <span style={muted}>{t('stapler.dictateHint')}</span>
         </>
       )}
@@ -120,15 +130,58 @@ export function StaplerApp() {
   );
 }
 
-/** Press the shortcut to start, press again to type the result at the cursor. */
+/** Drawn from a word, so everyone's Stapler can look different. Original to this app. */
+function StaplerFace({ word, size }: { word: string; size: number }) {
+  const f = faceFromWord(word);
+  const cx = 32;
+  const eyeY = 26;
+  const mouth = {
+    smile: 'M23 41 Q32 49 41 41',
+    flat: 'M24 43 L40 43',
+    open: 'M27 40 Q32 50 37 40 Z',
+    smirk: 'M24 43 Q34 46 41 38'
+  }[f.mouth];
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden style={{ display: 'block' }}>
+      <ellipse cx={cx} cy={32} rx={26 + f.wobble / 3} ry={26 - f.wobble / 3} fill={`hsl(${f.hue} 70% 72%)`} stroke="#1a1320" strokeWidth={2} />
+      {f.blush && <><circle cx={cx - 15} cy={36} r={4} fill="#f4a0a0" opacity={0.7} /><circle cx={cx + 15} cy={36} r={4} fill="#f4a0a0" opacity={0.7} /></>}
+      <circle cx={cx - f.eyeGap} cy={eyeY} r={f.eyeSize} fill="#1a1320" />
+      <circle cx={cx + f.eyeGap} cy={eyeY} r={f.eyeSize} fill="#1a1320" />
+      <path d={mouth} fill={f.mouth === 'open' ? '#1a1320' : 'none'} stroke="#1a1320" strokeWidth={2} strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** The actions around the face. Each is a real button, in reading order for the keyboard. */
+function Ring({ face, actions }: { face: React.ReactNode; actions: { label: string; run: () => void }[] }) {
+  const spots = ringPositions(actions.length, 108);
+  const SIZE = 300;
+  return (
+    <div style={{ position: 'relative', width: SIZE, height: SIZE, alignSelf: 'center', flexShrink: 0 }}>
+      <div style={{ position: 'absolute', left: SIZE / 2 - 32, top: SIZE / 2 - 32 }}>{face}</div>
+      {actions.map((a, i) => (
+        <button
+          key={a.label}
+          type="button"
+          onClick={a.run}
+          style={{ position: 'absolute', left: SIZE / 2 + spots[i].x - 42, top: SIZE / 2 + spots[i].y - 42, width: 84, height: 84, borderRadius: '50%', border: 'none', cursor: 'pointer', padding: 6, background: 'var(--cth-paper-100)', boxShadow: 'inset 0 0 0 1px var(--cth-ink-500)', color: 'var(--cth-ink-900)', fontFamily: 'var(--cth-font-ui)', fontSize: 11, lineHeight: '13px' }}
+        >{a.label}</button>
+      ))}
+    </div>
+  );
+}
+
+/** Hold the keys to record, let go to type the result at the cursor. If the key hook
+ *  couldn't load, main sends a toggle instead. */
 function useDictation(setNote: (s: string) => void, setInvisible: (v: boolean) => void): boolean {
   const { t } = useTranslation();
   const [active, setActive] = useState(false);
   const session = useRef<{ recorder: MediaRecorder; parts: Blob[]; stream: MediaStream } | null>(null);
 
-  useEffect(() => window.cth.onStaplerDictateToggle(() => {
-    const current = session.current;
-    if (current) {
+  useEffect(() => {
+    const stop = (): void => {
+      const current = session.current;
+      if (!current) return;
       session.current = null;
       setActive(false);
       current.recorder.onstop = () => {
@@ -142,24 +195,34 @@ function useDictation(setNote: (s: string) => void, setInvisible: (v: boolean) =
           .catch((e) => setNote(String(e)));
       };
       current.recorder.stop();
-      return;
-    }
-    void micStream().then((stream) => {
-      const parts: Blob[] = [];
-      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
-      recorder.ondataavailable = (e) => { if (e.data.size) parts.push(e.data); };
-      recorder.start();
-      session.current = { recorder, parts, stream };
-      setActive(true);
-    }).catch(() => setNote(t('stapler.noMic')));
-  }), [setNote, setInvisible, t]);
+    };
+    const start = (): void => {
+      if (session.current) return;
+      void micStream().then((stream) => {
+        const parts: Blob[] = [];
+        const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+        recorder.ondataavailable = (e) => { if (e.data.size) parts.push(e.data); };
+        recorder.start();
+        session.current = { recorder, parts, stream };
+        setActive(true);
+      }).catch(() => setNote(t('stapler.noMic')));
+    };
+    const offToggle = window.cth.onStaplerDictateToggle(() => { if (session.current) stop(); else start(); });
+    const offHold = window.cth.onStaplerDictate((what) => { if (what === 'start') start(); else stop(); });
+    return () => { offToggle(); offHold(); };
+  }, [setNote, setInvisible, t]);
   return active;
 }
 
 function ShotMode({ onSend }: { onSend: (subject: string, body: string) => Promise<boolean> }) {
   const { t } = useTranslation();
   const [shots, setShots] = useState<Shot[]>([]);
+  const [attached, setAttached] = useState<string[]>([]);
   const [text, setText] = useState('');
+  const attach = async (folder: boolean) => {
+    const paths = await window.cth.staplerPickFiles(folder);
+    setAttached((cur) => [...new Set([...cur, ...paths])]);
+  };
   const [capture, setCapture] = useState<Capture | null>(null);
   const [drag, setDrag] = useState<{ a: { x: number; y: number }; b: { x: number; y: number } } | null>(null);
   const [error, setError] = useState('');
@@ -234,12 +297,18 @@ function ShotMode({ onSend }: { onSend: (subject: string, body: string) => Promi
       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
         {shots.map((s, i) => <img key={s.path} src={s.preview} alt={t('stapler.shotAlt', { n: i + 1 })} style={{ width: 72, height: 48, objectFit: 'cover', boxShadow: 'inset 0 0 0 1px var(--cth-ink-300)' }} />)}
       </div>
+      <div style={{ display: 'flex', gap: 4 }}>
+        <button type="button" style={button} onClick={() => void attach(false)}>{t('stapler.attachFiles')}</button>
+        <button type="button" style={button} onClick={() => void attach(true)}>{t('stapler.attachFolder')}</button>
+      </div>
+      {attached.map((p) => <span key={p} style={{ ...muted, overflowWrap: 'anywhere' }}>{p}</span>)}
+      <span style={muted}>{t('stapler.shotsExpire')}</span>
       <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={t('stapler.addNote')} aria-label={t('stapler.addNote')} rows={3} style={field} />
       <button
         type="button"
         style={primary}
-        disabled={shots.length === 0}
-        onClick={() => void onSend(t('stapler.shotsSubject', { count: shots.length }), [text.trim(), ...shots.map((s) => `Screenshot: ${s.path}`)].filter(Boolean).join('\n')).then((ok) => { if (ok) { setShots([]); setText(''); } })}
+        disabled={shots.length === 0 && attached.length === 0}
+        onClick={() => void onSend(t('stapler.shotsSubject', { count: shots.length + attached.length }), [text.trim(), ...shots.map((s) => `Screenshot: ${s.path}`), ...attached.map((p) => `Attached: ${p}`)].filter(Boolean).join('\n')).then((ok) => { if (ok) { setShots([]); setAttached([]); setText(''); } })}
       >
         {t('stapler.send')}
       </button>
@@ -360,6 +429,9 @@ function MeetingMode({ onSend, setInvisible }: { onSend: (subject: string, body:
       <div style={{ flex: 1, minHeight: 80, overflow: 'auto', fontSize: 12, lineHeight: '17px' }}>
         {segments.map((s, i) => <div key={i}><strong>{s.speaker === 'you' ? t('stapler.you') : t('stapler.them')}:</strong> {s.text}</div>)}
       </div>
+      {state === 'done' && segments.length > 0 && (
+        <button type="button" style={button} onClick={() => void onSend(t('stapler.describeSubject', { title: title || t('stapler.untitled') }), `Read this meeting transcript and write a short description next to it, as description.md in the same folder: what it was about, decisions, and who is doing what next. Transcript: ${savedPath}`)}>{t('stapler.describe')}</button>
+      )}
       {state === 'done' && segments.length > 0 && (
         <button type="button" style={button} onClick={() => void onSend(t('stapler.meetingSubject', { title: title || t('stapler.untitled') }), `Transcript: ${savedPath}\n\n${segments.map((s) => `${s.speaker === 'you' ? 'You' : 'Them'}: ${s.text}`).join('\n')}`)}>{t('stapler.sendTranscript')}</button>
       )}

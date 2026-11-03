@@ -8,6 +8,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileS
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { TeamsClient, isAllowedRelayUrl, type Answerer, type TeamsState } from './teamsClient';
 import { getSecret, setSecret } from './integrations';
+import { mayDraftFor, teamReplyHowTo, teamReplyTarget } from '../shared/staplerExtras';
 
 const POLL_MS = 5000;
 const MAX_SEND_BYTES = 18 * 1024 * 1024; // packing grows this to about the 25 MB limit
@@ -68,7 +69,7 @@ export function writeEntries(dest: string, entries: { path: string; bytes: Buffe
   });
 }
 
-export function initTeams(w: TeamsWiring): void {
+export function initTeams(w: TeamsWiring): { onRouted: (msg: { from: string; subject?: string; body?: string }) => void } {
   const statePath = (): string => join(app.getPath('userData'), 'teams.json');
   let client: TeamsClient | null = null;
 
@@ -149,9 +150,14 @@ export function initTeams(w: TeamsWiring): void {
     if (!msg) return false;
     const peer = get().peers().find((p) => p.officeId === msg.peerId);
     if (peer && peer.answeredBy !== 'you') {
-      w.deliverToAgent(peer.answeredBy.agentId, `Message from ${peer.name}`, untrustedTeamBody(peer.name, msg.text));
+      w.deliverToAgent(peer.answeredBy.agentId, `Message from ${peer.name}`, `${untrustedTeamBody(peer.name, msg.text)}\n--- end of message ---\n${teamReplyHowTo(peer.officeId)}`);
     }
     return true;
+  }));
+
+  ipcMain.handle('teams:approveDraft', (_e, messageId: unknown, approved: unknown) => guard(() => {
+    if (typeof messageId !== 'string') throw new Error('bad request');
+    return get().approveDraft(messageId, approved === true);
   }));
 
   ipcMain.handle('teams:sendFile', (_e, peerId: unknown, folder: unknown) => guard(async () => {
@@ -169,4 +175,17 @@ export function initTeams(w: TeamsWiring): void {
     if (res.canceled || !res.filePaths[0]) return null;
     return writeEntries(res.filePaths[0], await get().downloadFile(id, password));
   }));
+
+  return {
+    /** Picks a draft reply out of hive traffic. Only the agent answering that teammate
+     *  can draft for them, and a draft waits for the person's approval. */
+    onRouted: (msg) => {
+      const peerId = teamReplyTarget(msg.subject);
+      if (!peerId || !client || typeof msg.body !== 'string') return;
+      const peer = client.peers().find((p) => p.officeId === peerId);
+      if (!peer || !mayDraftFor(peer.answeredBy, msg.from)) return;
+      client.addDraft(peerId, msg.body, msg.from);
+      w.webContents()?.send('teams:changed');
+    }
+  };
 }

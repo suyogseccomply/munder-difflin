@@ -108,6 +108,8 @@ export interface HarnessConfig {
   agentSkillGrants?: { [agentId: string]: { [skillId: string]: boolean } };
   /** Integrations each lasting agent may reach. Absent means none. */
   agentIntegrationGrants?: { [agentId: string]: string[] };
+  /** Extra words the Stapler should spell exactly this way. */
+  staplerVocabulary?: string[];
   capabilityServers?: { [id: string]: { label: string; command: string; args: string[]; secretNames: string[] } };
   semanticMemory: boolean;
   embeddingModel: 'minilm' | 'embeddinggemma';

@@ -244,6 +244,8 @@ export interface HarnessConfig {
   agentSkillGrants?: { [agentId: string]: { [skillId: string]: boolean } };
   /** Integrations each lasting agent may reach. Absent means none. */
   agentIntegrationGrants?: { [agentId: string]: string[] };
+  /** Extra words the Stapler should spell exactly this way. */
+  staplerVocabulary?: string[];
   capabilityServers?: { [id: string]: { label: string; command: string; args: string[]; secretNames: string[] } };
   /** Enable semantic memory (MemPalace CLI). No-op if mempalace isn't installed. */
   semanticMemory: boolean;

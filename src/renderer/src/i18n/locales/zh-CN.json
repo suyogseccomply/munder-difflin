@@ -1593,6 +1593,17 @@
     "memoryGraph": "图谱"
   },
   "stapler": {
+    "makeInvisible": "隐藏",
+    "visibleAgain": "显示",
+    "hiddenNow": "在系统允许的情况下（Windows 和 macOS）不出现在屏幕共享和录制中。",
+    "invisibleHint": "录制时也会自动隐藏。",
+    "faceWord": "它的脸由这个词生成",
+    "attachFiles": "附加文件",
+    "attachFolder": "附加文件夹",
+    "shotsExpire": "截图在 24 小时后删除。附件按其位置发送并保留在原处。",
+    "describe": "请求描述",
+    "describeSubject": "描述会议：{{title}}",
+    "dictateHint": "在任意应用中听写：按住 Ctrl+Alt+Space，说话，然后松开。",
     "title": "订书机",
     "open": "打开订书机",
     "back": "返回",
@@ -1604,7 +1615,6 @@
     "message": "录制消息",
     "meetings": "过往会议",
     "invisible": "在屏幕共享中隐藏（Windows 和 macOS）",
-    "dictateHint": "在任意应用中听写：按 Ctrl+Alt+Space，说话，再按一次。",
     "sent": "已发送。",
     "failed": "操作未成功。",
     "heardNothing": "没有听到语音。",
@@ -1639,6 +1649,10 @@
     "noMeetings": "未找到会议。"
   },
   "team": {
+    "draftBy": "{{name}} 的草稿",
+    "sendDraft": "发送",
+    "discard": "丢弃",
+    "agentHint": "对方的消息需要你批准。之后智能体会收到，并标记为外部信息。它的回复会作为草稿返回这里，由你发送。",
     "loading": "加载中…",
     "relay": "中继",
     "relayHint": "在办公室之间传递加密消息的服务器。运行方法见 server/README.md。",
@@ -1654,7 +1668,6 @@
     "you": "你",
     "remove": "移除",
     "fingerprint": "安全码。读给队友听，应与对方的一致：",
-    "agentHint": "对方的消息需要你批准。之后智能体会收到，并标记为外部信息。如需回复，请自己在此输入。",
     "approve": "批准",
     "reject": "拒绝",
     "approved": "已转交智能体。",
@@ -1705,5 +1718,12 @@
     "copy": "复制命令",
     "manual": "手动设置",
     "checkAgain": "再次检查"
+  },
+  "staplerSettings": {
+    "title": "订书机语音",
+    "model": "语音模型",
+    "standard": "标准",
+    "larger": "更大更准确（下载更大）",
+    "words": "你自己的词，每行一个。它们会完全按所写拼写，此外还有 {{count}} 个内置技术名称。"
   }
 }

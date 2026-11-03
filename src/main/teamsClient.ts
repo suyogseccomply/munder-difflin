@@ -37,7 +37,9 @@ export interface ChatMessage {
   /** A file offered in this message. The password is shared separately. */
   file?: { id: string; name: string; bytes: number };
   /** Set while a message routed to an agent waits for the person's decision. */
-  decision?: 'pending' | 'approved' | 'rejected';
+  decision?: 'pending' | 'approved' | 'rejected' | 'draft';
+  /** A draft: the agent that wrote it. */
+  draftedBy?: string;
 }
 
 export interface TeamsState {
@@ -358,6 +360,33 @@ export class TeamsClient {
     msg.decision = approved ? 'approved' : 'rejected';
     this.save();
     return approved ? msg : null;
+  }
+
+  /** An answering agent's reply, kept here until the person approves it. Nothing
+   *  leaves this machine yet. */
+  addDraft(peerId: string, text: string, draftedBy: string): ChatMessage | null {
+    if (!this.state.peers.some((p) => p.officeId === peerId)) return null;
+    const clean = text.trim().slice(0, MAX_TEXT);
+    if (!clean) return null;
+    const msg: ChatMessage = { id: randomBytes(16).toString('hex'), peerId, direction: 'out', text: clean, at: this.now(), decision: 'draft', draftedBy };
+    this.record(msg);
+    return msg;
+  }
+
+  /** Sends a draft, or discards it. Either way it can't be acted on twice. */
+  async approveDraft(messageId: string, approved: boolean): Promise<boolean> {
+    const draft = this.state.history.find((m) => m.id === messageId && m.decision === 'draft');
+    if (!draft) return false;
+    const peer = this.state.peers.find((p) => p.officeId === draft.peerId);
+    if (!approved || !peer) {
+      draft.decision = 'rejected';
+      this.save();
+      return true;
+    }
+    await this.sendSealed(peer, { text: draft.text });
+    this.state.history = this.state.history.filter((m) => m.id !== messageId);
+    this.save();
+    return true;
   }
 
   // ─── Files ────────────────────────────────────────────────────────────────

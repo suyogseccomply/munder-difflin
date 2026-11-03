@@ -4177,7 +4177,11 @@ const closingTime = new ClosingTimeController(
   // at their next hook boundary instead of waiting for a Stop.
   control
 );
-hive.setRoutedObserver((msg, targets) => closingTime.onRouted(msg, targets));
+let teamsOnRouted: ((msg: { from: string; subject?: string; body?: string }) => void) | null = null;
+hive.setRoutedObserver((msg, targets) => {
+  closingTime.onRouted(msg, targets);
+  teamsOnRouted?.(msg);
+});
 ipcMain.handle('app:startClosingTime', () => closingTime.start());
 ipcMain.handle('app:cancelClosingTime', () => closingTime.cancel());
 
@@ -5866,18 +5870,19 @@ function onSystemResume(reason: string): void {
 app.whenReady().then(() => {
   const openIn = readConfig().defaultView;
   if (openIn && readConfig().workspaceView !== openIn) writeConfig({ workspaceView: openIn });
-  initTeams({
+  teamsOnRouted = initTeams({
     relayUrl: () => readConfig().teamsRelayUrl,
     setRelayUrl: (teamsRelayUrl) => { writeConfig({ teamsRelayUrl }); },
     deliverToAgent: (agentId, subject, body) => { routeWork(agentId, subject, body, 'team-relay'); },
     webContents: () => liveWebContents() ?? null
-  });
+  }).onRouted;
   initStapler({
     preloadPath: join(__dirname, '../preload/index.js'),
     rendererUrl: !app.isPackaged ? process.env.ELECTRON_RENDERER_URL : undefined,
     rendererFile: join(__dirname, '../renderer/index.html'),
     hiveRoot: () => hive.root(),
-    localModel: () => (readConfig().staplerModel === 'larger' ? 'larger' : 'standard')
+    localModel: () => (readConfig().staplerModel === 'larger' ? 'larger' : 'standard'),
+    vocabulary: () => readConfig().staplerVocabulary ?? []
   });
   // Realtime Michael mic-gate hygiene (rt-8 / Pam rt-10 nit): the voice session
   // opens the mic permission gate by persisting realtimeVoiceEnabled=true and

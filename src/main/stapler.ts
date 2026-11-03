@@ -4,11 +4,13 @@
  * session, so the main window's mic gate is untouched and microphone access exists
  * only while this window does.
  */
-import { BrowserWindow, clipboard, desktopCapturer, globalShortcut, ipcMain, screen, session, app } from 'electron';
+import { BrowserWindow, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, screen, session, app } from 'electron';
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { LOCAL_MODELS, transcribeLocally, type LocalModel } from './localTranscribe';
+import { correctTranscript } from '../shared/vocabulary';
+import { expiredFiles, holdKeyFor, holdStep, newHoldState, type HoldState } from '../shared/staplerExtras';
 import {
   STAPLER_SAMPLE_RATE,
   formatTranscript,
@@ -29,6 +31,7 @@ export interface StaplerDeps {
   rendererFile: string;
   hiveRoot: () => string | null;
   localModel: () => LocalModel;
+  vocabulary: () => string[];
 }
 
 let win: BrowserWindow | null = null;
@@ -49,6 +52,57 @@ function readMeeting(root: string, id: string): MeetingSummary | null {
     };
   } catch {
     return null;
+  }
+}
+
+/** Removes screenshots past their day. Agents were sent a path, so one acted on later
+ *  than that finds the file gone. Meeting audio is never written to disk at all. */
+function sweepShots(): void {
+  const dir = shotsDir();
+  if (!dir || !existsSync(dir)) return;
+  const files = readdirSync(dir).flatMap((name) => {
+    try { return [{ name, mtimeMs: statSync(join(dir, name)).mtimeMs }]; } catch { return []; }
+  });
+  for (const f of expiredFiles(files, Date.now())) {
+    try { rmSync(join(dir, f.name), { force: true }); } catch { /* next sweep */ }
+  }
+}
+
+/**
+ * Hold-to-talk needs key-up, which Electron's shortcuts don't report, so it uses a
+ * low-level key hook while the Stapler is open. Every key but the three in the
+ * combination is dropped on arrival: nothing typed is stored, logged or forwarded.
+ * Returns false if the hook can't load, and press-to-toggle remains as the fallback.
+ */
+let stopHook: (() => void) | null = null;
+function startHoldToTalk(send: (channel: string) => void): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { uIOhook, UiohookKey } = require('uiohook-napi') as typeof import('uiohook-napi');
+    const codes = { ctrl: [UiohookKey.Ctrl, UiohookKey.CtrlRight], alt: [UiohookKey.Alt, UiohookKey.AltRight], space: UiohookKey.Space };
+    let state: HoldState = newHoldState();
+    const on = (keycode: number, down: boolean): void => {
+      const key = holdKeyFor(keycode, codes);
+      if (!key) return;
+      const r = holdStep(state, key, down);
+      state = r.state;
+      if (r.action) send(r.action === 'start' ? 'stapler:dictateStart' : 'stapler:dictateStop');
+    };
+    const onDown = (e: { keycode: number }): void => on(e.keycode, true);
+    const onUp = (e: { keycode: number }): void => on(e.keycode, false);
+    uIOhook.on('keydown', onDown);
+    uIOhook.on('keyup', onUp);
+    uIOhook.start();
+    stopHook = () => {
+      uIOhook.off('keydown', onDown);
+      uIOhook.off('keyup', onUp);
+      try { uIOhook.stop(); } catch { /* already stopped */ }
+      stopHook = null;
+    };
+    return true;
+  } catch (e) {
+    console.error('[stapler] hold-to-talk unavailable, using press-to-toggle:', e instanceof Error ? e.message : e);
+    return false;
   }
 }
 
@@ -84,17 +138,35 @@ function createWindow(): BrowserWindow {
   next.on('closed', () => {
     win = null;
     restoreBounds = null;
+    stopHook?.();
     if (globalShortcut.isRegistered(DICTATION_SHORTCUT)) globalShortcut.unregister(DICTATION_SHORTCUT);
   });
-  globalShortcut.register(DICTATION_SHORTCUT, () => {
-    if (win && !win.isDestroyed()) win.webContents.send('stapler:dictateToggle');
-  });
+  const send = (channel: string): void => { if (win && !win.isDestroyed()) win.webContents.send(channel); };
+  // The hook only watches, so with it running the shortcut just keeps the combination
+  // from also reaching the focused app.
+  const holding = startHoldToTalk(send);
+  globalShortcut.register(DICTATION_SHORTCUT, () => { if (!holding) send('stapler:dictateToggle'); });
   return next;
 }
 
 /** Registers the Stapler's IPC. The window itself opens on request. */
 export function initStapler(d: StaplerDeps): void {
   deps = d;
+  sweepShots();
+  setInterval(sweepShots, 60 * 60 * 1000).unref();
+
+  /** Files or a folder to send along, by path. Nothing is copied or uploaded. */
+  ipcMain.handle('stapler:pickFiles', async (_e, folder: unknown) => {
+    const res = await dialog.showOpenDialog({
+      title: 'Attach',
+      properties: folder === true ? ['openDirectory'] : ['openFile', 'multiSelections'],
+      filters: folder === true ? undefined : [
+        { name: 'Documents and video', extensions: ['pdf', 'mp4', 'mov', 'webm', 'mkv', 'avi', 'png', 'jpg', 'jpeg', 'txt', 'md', 'csv'] },
+        { name: 'All files', extensions: ['*'] }
+      ]
+    });
+    return res.canceled ? [] : res.filePaths;
+  });
 
   ipcMain.handle('stapler:toggle', () => {
     if (win && !win.isDestroyed()) { win.close(); return false; }
@@ -157,9 +229,10 @@ export function initStapler(d: StaplerDeps): void {
     return { ok: true as const, path };
   });
 
-  ipcMain.handle('stapler:transcribe', (_e, samples: unknown) => {
+  ipcMain.handle('stapler:transcribe', async (_e, samples: unknown) => {
     if (!(samples instanceof Float32Array)) return { ok: false as const, error: 'bad audio' };
-    return transcribeLocally(samples, deps!.localModel(), join(app.getPath('userData'), 'whisper-models'));
+    const res = await transcribeLocally(samples, deps!.localModel(), join(app.getPath('userData'), 'whisper-models'));
+    return res.ok ? { ok: true as const, text: correctTranscript(res.text, deps!.vocabulary()) } : res;
   });
   ipcMain.handle('stapler:modelInfo', () => ({ sampleRate: STAPLER_SAMPLE_RATE, model: LOCAL_MODELS[deps!.localModel()] }));
 
@@ -221,6 +294,7 @@ export function initStapler(d: StaplerDeps): void {
 }
 
 export function shutdownStapler(): void {
+  stopHook?.();
   if (globalShortcut.isRegistered(DICTATION_SHORTCUT)) globalShortcut.unregister(DICTATION_SHORTCUT);
   if (win && !win.isDestroyed()) win.close();
 }

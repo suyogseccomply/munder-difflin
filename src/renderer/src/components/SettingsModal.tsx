@@ -21,6 +21,7 @@ import { OfficeThemePicker } from './OfficeThemePicker';
 import { McpDefaultsSettings } from './McpDefaultsSettings';
 import { CapabilitiesPanel } from './CapabilitiesPanel';
 import { TokenLimitsSettings } from './TokenLimitsSettings';
+import { StaplerSettings } from './StaplerSettings';
 import { GeneralExtrasSettings } from './GeneralExtrasSettings';
 import { AnswerBySettings, TempsPerAgentSetting } from './TempRoutingSettings';
 import { IntegrationsRegistry } from './IntegrationsRegistry';
@@ -1932,6 +1933,7 @@ export function SettingsModal({ config, onClose, initialSection }: SettingsModal
                   )}
 
                   {/* VOICE — Free Flow dictation + Realtime Michael (v0.3.4: its own tab) */}
+                  {activeSection === 'Voice' && <StaplerSettings config={config} />}
                   {activeSection === 'Voice' && (
                     <>
                       {/* Free Flow (voice dictation) */}

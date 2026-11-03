@@ -82,6 +82,8 @@ asarUnpack:
   - "**/node_modules/better-sqlite3/**"
   # ONNX Runtime (local speech for the Stapler) loads a native binding and DLLs.
   - "**/node_modules/onnxruntime-node/**"
+  # The key hook for hold-to-talk dictation loads a prebuilt native binding.
+  - "**/node_modules/uiohook-napi/**"
 
 # Rebuild native deps (node-pty) for the target during packaging.
 npmRebuild: true

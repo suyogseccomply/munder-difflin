@@ -133,6 +133,13 @@ function Chat({ peer, act }: {
                 <PixelButton size="sm" variant="secondary" onClick={() => void act(() => window.cth.teamsDecide(m.id, false))}>{t('team.reject')}</PixelButton>
               </div>
             )}
+            {m.decision === 'draft' && (
+              <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                <span style={muted}>{t('team.draftBy', { name: agents.find((a) => a.id === m.draftedBy)?.name ?? m.draftedBy })}</span>
+                <PixelButton size="sm" variant="primary" onClick={() => void act(() => window.cth.teamsApproveDraft(m.id, true))}>{t('team.sendDraft')}</PixelButton>
+                <PixelButton size="sm" variant="secondary" onClick={() => void act(() => window.cth.teamsApproveDraft(m.id, false))}>{t('team.discard')}</PixelButton>
+              </div>
+            )}
             {m.decision === 'approved' && <div style={muted}>{t('team.approved')}</div>}
             {m.decision === 'rejected' && <div style={muted}>{t('team.rejected')}</div>}
             {m.file && m.direction === 'in' && (saved[m.id]

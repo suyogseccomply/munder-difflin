@@ -1593,6 +1593,17 @@
     "memoryGraph": "Graph"
   },
   "stapler": {
+    "makeInvisible": "Make invisible",
+    "visibleAgain": "Make visible",
+    "hiddenNow": "Hidden from screen shares and recordings where the system allows it (Windows and macOS).",
+    "invisibleHint": "It also hides itself while recording.",
+    "faceWord": "Its face comes from this word",
+    "attachFiles": "attach files",
+    "attachFolder": "attach a folder",
+    "shotsExpire": "Screenshots are deleted after 24 hours. Attachments are sent by their location and stay where they are.",
+    "describe": "ask for a description",
+    "describeSubject": "Describe meeting: {{title}}",
+    "dictateHint": "Dictate into any app: hold Ctrl+Alt+Space, speak, and let go.",
     "title": "Stapler",
     "open": "Open the Stapler",
     "back": "back",
@@ -1604,7 +1615,6 @@
     "message": "Record a message",
     "meetings": "Past meetings",
     "invisible": "Hide from screen shares (Windows and macOS)",
-    "dictateHint": "Dictate into any app: press Ctrl+Alt+Space, speak, press it again.",
     "sent": "Sent.",
     "failed": "That did not work.",
     "heardNothing": "No speech heard.",
@@ -1639,6 +1649,10 @@
     "noMeetings": "No meetings found."
   },
   "team": {
+    "draftBy": "Draft by {{name}}",
+    "sendDraft": "send",
+    "discard": "discard",
+    "agentHint": "Their messages wait for your approval. Then the agent receives them marked as outside information. Its reply comes back here as a draft for you to send.",
     "loading": "Loading…",
     "relay": "Relay",
     "relayHint": "The server that passes encrypted messages between offices. See server/README.md to run one.",
@@ -1654,7 +1668,6 @@
     "you": "You",
     "remove": "remove",
     "fingerprint": "Safety code. Read it to your teammate, and it should match theirs:",
-    "agentHint": "Their messages wait for your approval. Then the agent receives them marked as outside information. To reply, write here yourself.",
     "approve": "approve",
     "reject": "reject",
     "approved": "Passed to the agent.",
@@ -1705,5 +1718,12 @@
     "copy": "copy command",
     "manual": "set up manually",
     "checkAgain": "check again"
+  },
+  "staplerSettings": {
+    "title": "Stapler speech",
+    "model": "Speech model",
+    "standard": "Standard",
+    "larger": "Larger and more accurate (bigger download)",
+    "words": "Your own words, one per line. These are spelled exactly as written, alongside {{count}} built-in technical names."
   }
 }

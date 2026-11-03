@@ -286,3 +286,30 @@ test('every locale has the workspace labels at the top level', () => {
     for (const key of ['stapler', 'screen_team', 'toClassic', 'screen_tasks']) assert.ok(workspace[key], `${l}: ${key}`);
   }
 });
+
+// ─── Agent drafts ───────────────────────────────────────────────────────────
+
+test('a draft stays here until approved, then sends once', () => withRelay(async (url) => {
+  const { a, b } = await paired(url);
+  const draft = b.addDraft(a.me.officeId, 'the reply', 'dwight');
+  assert.equal(draft.decision, 'draft');
+  assert.deepEqual(await a.poll(), [], 'nothing left this machine');
+  assert.equal(await b.approveDraft(draft.id, true), true);
+  assert.equal((await a.poll())[0].text, 'the reply');
+  assert.equal(await b.approveDraft(draft.id, true), false, 'cannot send twice');
+  assert.equal(b.history(a.me.officeId).filter((m) => m.decision === 'draft').length, 0);
+}));
+
+test('a discarded draft never goes out', () => withRelay(async (url) => {
+  const { a, b } = await paired(url);
+  const draft = b.addDraft(a.me.officeId, 'do not send', 'dwight');
+  await b.approveDraft(draft.id, false);
+  assert.deepEqual(await a.poll(), []);
+  assert.equal(await b.approveDraft(draft.id, true), false);
+}));
+
+test('a draft for a stranger, or an empty one, is dropped', () => withRelay(async (url) => {
+  const { a, b } = await paired(url);
+  assert.equal(b.addDraft('f'.repeat(40), 'x', 'dwight'), null);
+  assert.equal(b.addDraft(a.me.officeId, '   ', 'dwight'), null);
+}));

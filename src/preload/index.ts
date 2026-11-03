@@ -319,6 +319,8 @@ export interface HarnessConfig {
   agentSkillGrants?: { [agentId: string]: { [skillId: string]: boolean } };
   /** Integrations each lasting agent may reach. Absent means none. */
   agentIntegrationGrants?: { [agentId: string]: string[] };
+  /** Extra words the Stapler should spell exactly this way. */
+  staplerVocabulary?: string[];
   capabilityServers?: { [id: string]: { label: string; command: string; args: string[]; secretNames: string[] } };
   semanticMemory: boolean;
   embeddingModel: 'minilm' | 'embeddinggemma';
@@ -872,6 +874,15 @@ const api = {
   staplerSaveMeeting: (m: { title: string; startedAt: number; segments: TranscriptSegment[] }): Promise<{ ok: true; id: string; path: string } | { ok: false; error: string }> => ipcRenderer.invoke('stapler:saveMeeting', m),
   staplerListMeetings: (): Promise<MeetingSummary[]> => ipcRenderer.invoke('stapler:listMeetings'),
   staplerUpdateTranscript: (id: string, text: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('stapler:updateTranscript', id, text),
+  staplerPickFiles: (folder: boolean): Promise<string[]> => ipcRenderer.invoke('stapler:pickFiles', folder),
+  onStaplerDictate: (cb: (what: 'start' | 'stop') => void): (() => void) => {
+    const start = () => cb('start');
+    const stop = () => cb('stop');
+    ipcRenderer.on('stapler:dictateStart', start);
+    ipcRenderer.on('stapler:dictateStop', stop);
+    return () => { ipcRenderer.removeListener('stapler:dictateStart', start); ipcRenderer.removeListener('stapler:dictateStop', stop); };
+  },
+  teamsApproveDraft: (messageId: string, approved: boolean): Promise<TeamsResult<boolean>> => ipcRenderer.invoke('teams:approveDraft', messageId, approved),
   onStaplerDictateToggle: (cb: () => void): (() => void) => {
     const listener = () => cb();
     ipcRenderer.on('stapler:dictateToggle', listener);
